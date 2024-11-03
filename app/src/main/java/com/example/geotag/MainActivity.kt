@@ -96,9 +96,28 @@ class MainActivity : AppCompatActivity(), LocationListener {
         }
     }
 
-    private fun startCalibration(roomName: String) {
+    fun startCalibration(roomName: String) {
         currentRoomCoordinates.clear()
-        coordinatesText.text = "Calibrating $roomName..."
+
+        // Fetch and display initial coordinates
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+
+            if (location != null) {
+                val latitude = location.latitude
+                val longitude = location.longitude
+                coordinatesText.text = "Coordinates: ($latitude, $longitude) Calibrating $roomName..."
+
+                // Update currentRoomCoordinates with the current values
+                currentRoomCoordinates.add(Pair(latitude.toFloat(), longitude.toFloat()))
+            } else {
+                coordinatesText.text = "Coordinates: (unknown) Calibrating $roomName..."
+            }
+        } else {
+            coordinatesText.text = "Location permission not granted"
+        }
+
         isCalibrating = true
         startLocationUpdates()
         updateButtonStates(roomName, true)
@@ -172,12 +191,17 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private fun startLocationUpdates() {
         if (checkPermissions()) {
             // First try GPS
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0.5f, this)
-            }
+//            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+//                Toast.makeText(this, "GPS USED", Toast.LENGTH_SHORT).show()
+//                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0.5f, this)
+//            }else if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED){
+//                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0.5f, this)
+//                Toast.makeText(this, "WIFI USED", Toast.LENGTH_SHORT).show()
+//            }
 
             // Then add Network Provider as a backup
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "WIFI USED", Toast.LENGTH_SHORT).show()
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0.5f, this)
             }
         } else {
