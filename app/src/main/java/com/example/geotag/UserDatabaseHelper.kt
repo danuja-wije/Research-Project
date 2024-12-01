@@ -54,4 +54,16 @@ class UserDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         cursor.close()
         return isValidUser
     }
+    fun getUserId(email: String, password: String): Int {
+        val db = readableDatabase
+        val query = "SELECT $COLUMN_ID FROM $TABLE_USERS WHERE $COLUMN_EMAIL = ? AND $COLUMN_PASSWORD = ?"
+        val cursor = db.rawQuery(query, arrayOf(email, password))
+
+        var userId = -1 // Default to -1 if no user is found
+        if (cursor.moveToFirst()) {
+            userId = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ID))
+        }
+        cursor.close()
+        return userId
+    }
 }

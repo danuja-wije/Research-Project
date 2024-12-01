@@ -1,10 +1,16 @@
 package com.example.geotag
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.math.sqrt
 
-class RoomSetupActivity : AppCompatActivity() {
+class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var lightCountInput: EditText
     private lateinit var generateLightsButton: Button
@@ -12,7 +18,14 @@ class RoomSetupActivity : AppCompatActivity() {
     private lateinit var saveButton: Button
     private lateinit var databaseHelper: RoomDatabaseHelper
 
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+
     private val lightDetails = mutableListOf<Light>()
+    private val brightnessSeekBars = mutableMapOf<Int, SeekBar>()
+
+    private var lastUpdateTime: Long = 0
+    private val UPDATE_INTERVAL = 100
 
     data class Light(var name: String, var brightness: Int, var manualControl: Boolean)
 
@@ -28,6 +41,9 @@ class RoomSetupActivity : AppCompatActivity() {
         generateLightsButton = findViewById(R.id.generateLightsButton)
         lightsContainer = findViewById(R.id.lightsContainer)
         saveButton = findViewById(R.id.saveButton)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         val userId = intent.getIntExtra("USER_ID", -1)
         val roomName = intent.getStringExtra("ROOM_NAME") ?: "Unknown Room"
@@ -57,42 +73,44 @@ class RoomSetupActivity : AppCompatActivity() {
         }
 
         saveButton.setOnClickListener {
-            // Save lights for this room
             databaseHelper.saveLights(roomName, lightDetails)
-
-            // Save room calibration data with user ID
-            databaseHelper.saveCalibratedRoom(
-                userId = userId,
-                roomName = roomName,
-                minLat = 0f, // Placeholder: replace with actual latitude
-                maxLat = 0f, // Placeholder: replace with actual latitude
-                minLon = 0f, // Placeholder: replace with actual longitude
-                maxLon = 0f  // Placeholder: replace with actual longitude
-            )
             Toast.makeText(this, "Lights and Room saved!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        accelerometer?.also { sensor ->
+            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
     }
 
     private fun generateLightFields(count: Int) {
         lightsContainer.removeAllViews()
         lightDetails.clear()
+        brightnessSeekBars.clear()
 
         for (i in 1..count) {
             val light = Light(name = "Light $i", brightness = 50, manualControl = true)
             lightDetails.add(light)
-
-            addLightToUI(light)
+            addLightToUI(i - 1, light)
         }
     }
 
     private fun populateLightsUI(savedLights: List<Light>) {
         lightsContainer.removeAllViews()
-        savedLights.forEach { light ->
-            addLightToUI(light)
+        brightnessSeekBars.clear()
+        savedLights.forEachIndexed { index, light ->
+            addLightToUI(index, light)
         }
     }
 
-    private fun addLightToUI(light: Light) {
+    private fun addLightToUI(index: Int, light: Light) {
         val lightLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(8, 8, 8, 8)
@@ -111,7 +129,7 @@ class RoomSetupActivity : AppCompatActivity() {
         }
 
         val brightnessSeekBar = SeekBar(this).apply {
-            max = 100
+            max = 255
             progress = light.brightness
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -120,13 +138,15 @@ class RoomSetupActivity : AppCompatActivity() {
             isEnabled = light.manualControl
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    light.brightness = progress
+                    if (fromUser) light.brightness = progress
                 }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
+
+        brightnessSeekBars[index] = brightnessSeekBar
 
         val manualControlSwitch = CheckBox(this).apply {
             text = "Manual Brightness"
@@ -146,6 +166,39 @@ class RoomSetupActivity : AppCompatActivity() {
         lightLayout.addView(brightnessSeekBar)
 
         lightsContainer.addView(lightLayout)
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        event?.let {
+            val currentTime = System.currentTimeMillis()
+            if ((currentTime - lastUpdateTime) > UPDATE_INTERVAL) {
+                lastUpdateTime = currentTime
+
+                val x = it.values[0]
+                val y = it.values[1]
+                val z = it.values[2]
+                val acceleration = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
+                val brightness = accelerationToBrightness(acceleration)
+
+                runOnUiThread {
+                    lightDetails.forEachIndexed { index, light ->
+                        if (!light.manualControl) {
+                            light.brightness = brightness
+                            brightnessSeekBars[index]?.progress = brightness
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    private fun accelerationToBrightness(acceleration: Float): Int {
+        val minAcceleration = 0f
+        val maxAcceleration = 12f
+        val clampedAcceleration = acceleration.coerceIn(minAcceleration, maxAcceleration)
+        return ((clampedAcceleration / maxAcceleration) * 255).toInt()
     }
 
     override fun onSupportNavigateUp(): Boolean {

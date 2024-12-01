@@ -1,0 +1,21 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center">
+
+    <Button
+        android:id="@+id/recalibrateButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Recalibrate Rooms"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/viewRoomsButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="View Calibrated Rooms" />
+
+</LinearLayout>

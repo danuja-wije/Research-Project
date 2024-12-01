@@ -29,12 +29,12 @@ class LoginActivity : AppCompatActivity() {
         loginButton.setOnClickListener {
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
-            val userId = dbHelper.registerUser(email, password)
+            val userId = dbHelper.getUserId(email, password)
             if (email.isNotEmpty() && password.isNotEmpty()) {
                 if (dbHelper.loginUser(email, password)) {
-                    Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
-                    val intent = Intent(this, CalibratedRoomsActivity::class.java).apply {
-                        putExtra("USER_ID", userId.toInt()) // Pass userId as Int
+                    Toast.makeText(this, "Login successful! and User ID is $userId", Toast.LENGTH_SHORT).show()
+                    val intent = Intent(this, RoomOptionsActivity::class.java).apply {
+                        putExtra("USER_ID", userId) // Pass userId as Int
                     }
                     startActivity(intent)
                     finish()
