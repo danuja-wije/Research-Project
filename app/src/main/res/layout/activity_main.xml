@@ -3,34 +3,18 @@
     android:layout_height="match_parent"
     android:padding="16dp">
 
-    <EditText
-        android:id="@+id/roomCountInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Enter the number of rooms"
-        android:inputType="number" />
-
-    <Button
-        android:id="@+id/submitRoomCountButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Submit"
-        android:layout_below="@id/roomCountInput"
-        android:layout_marginTop="8dp" />
 
     <TextView
         android:id="@+id/coordinatesText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Coordinates: (0, 0)"
-        android:textSize="18sp"
-        android:layout_below="@id/submitRoomCountButton"
-        android:layout_marginTop="8dp" />
+        android:textSize="18sp" />
 
     <com.example.geotag.UserLocationView
         android:id="@+id/userLocationView"
         android:layout_width="match_parent"
-        android:layout_height="400dp"
+        android:layout_height="300dp"
         android:layout_below="@id/coordinatesText"
         android:layout_marginTop="16dp" />
 

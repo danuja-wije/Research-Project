@@ -2,6 +2,7 @@ package com.example.geotag
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.location.Location
@@ -24,29 +25,42 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private lateinit var roomCountInput: EditText
     private lateinit var submitRoomCountButton: Button
     private lateinit var coordinatesText: TextView
-
+    private lateinit var userLocationView: UserLocationView
+    private lateinit var roomDbHelper: RoomDatabaseHelper
     private var currentRoomCoordinates = mutableListOf<Pair<Float, Float>>()
     private val roomBoundaries = mutableMapOf<String, Pair<Pair<Float, Float>, Pair<Float, Float>>>()
     private var totalRooms = 0
     private var calibratedRooms = 0
     private var isCalibrating = false
-
+    private var userId: Int = -1 // Class-level variable for userId
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         roomsContainer = findViewById(R.id.roomsContainer)
-        roomCountInput = findViewById(R.id.roomCountInput)
-        submitRoomCountButton = findViewById(R.id.submitRoomCountButton)
         coordinatesText = findViewById(R.id.coordinatesText)
+        userLocationView = findViewById(R.id.userLocationView)
 
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
-        submitRoomCountButton.setOnClickListener {
-            totalRooms = roomCountInput.text.toString().toIntOrNull() ?: 0
-            if (totalRooms > 0) generateRoomViews(totalRooms)
+        // Get room count and userId from intent
+        val roomCount = intent.getIntExtra("ROOM_COUNT", 0)
+        userId = intent.getIntExtra("USER_ID", -1)
+
+        if (userId == -1) {
+            Toast.makeText(this, "Invalid User ID", Toast.LENGTH_SHORT).show()
+            finish()
+            return
         }
 
+        if (roomCount > 0) {
+            generateRoomViews(roomCount)
+        } else {
+            Toast.makeText(this, "Invalid room count!", Toast.LENGTH_SHORT).show()
+            finish() // Close MainActivity if no valid room count is provided
+        }
+
+        roomDbHelper = RoomDatabaseHelper(this)
         requestPermissions()
     }
 
@@ -95,21 +109,40 @@ class MainActivity : AppCompatActivity(), LocationListener {
             roomsContainer.addView(roomLayout)
         }
     }
+    private fun hideAllButtons() {
+        for (i in 0 until roomsContainer.childCount) {
+            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
+            val startButton = roomLayout.getChildAt(2) as Button
+            val stopButton = roomLayout.getChildAt(3) as Button
 
+            // Hide the buttons
+            startButton.visibility = View.GONE
+            stopButton.visibility = View.GONE
+        }
+    }
+    private fun updateButtonStates(roomName: String, inProgress: Boolean) {
+        for (i in 0 until roomsContainer.childCount) {
+            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
+            val roomLabel = roomLayout.getChildAt(0) as TextView
+            val startButton = roomLayout.getChildAt(2) as Button
+            val stopButton = roomLayout.getChildAt(3) as Button
+
+            // Update the buttons for the specified room
+            if (roomLabel.text == roomName) {
+                startButton.isEnabled = !inProgress
+                stopButton.isEnabled = inProgress
+            }
+        }
+    }
     fun startCalibration(roomName: String) {
         currentRoomCoordinates.clear()
 
-        // Fetch and display initial coordinates
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-
             if (location != null) {
                 val latitude = location.latitude
                 val longitude = location.longitude
                 coordinatesText.text = "Coordinates: ($latitude, $longitude) Calibrating $roomName..."
-
-                // Update currentRoomCoordinates with the current values
                 currentRoomCoordinates.add(Pair(latitude.toFloat(), longitude.toFloat()))
             } else {
                 coordinatesText.text = "Coordinates: (unknown) Calibrating $roomName..."
@@ -130,7 +163,19 @@ class MainActivity : AppCompatActivity(), LocationListener {
         if (currentRoomCoordinates.isNotEmpty()) {
             val boundary = storeRoomBoundary(roomName)
             rangeLabel.text = "Range: ${boundary.first} to ${boundary.second}"
-            highlightRoom(roomName, Color.YELLOW)
+
+            // Use userId for saving calibrated room
+            roomDbHelper.saveCalibratedRoom(
+                userId,
+                roomName,
+                boundary.first.first,
+                boundary.first.second,
+                boundary.second.first,
+                boundary.second.second
+            )
+
+            // Add "Setup Room" button dynamically for the calibrated room
+            addSetupRoomButton(roomName)
             calibratedRooms++
         } else {
             Toast.makeText(this, "No coordinates captured for $roomName", Toast.LENGTH_SHORT).show()
@@ -139,6 +184,28 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
         if (calibratedRooms == totalRooms) hideAllButtons()
         updateButtonStates(roomName, false)
+    }
+
+
+    // Add "Setup Room" button for the calibrated room
+    private fun addSetupRoomButton(roomName: String) {
+        for (i in 0 until roomsContainer.childCount) {
+            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
+            val roomLabel = roomLayout.getChildAt(0) as TextView
+
+            if (roomLabel.text == roomName) {
+                val setupButton = Button(this).apply {
+                    text = "Setup Room"
+                    setOnClickListener {
+                        val intent = Intent(this@MainActivity, RoomSetupActivity::class.java)
+                        intent.putExtra("ROOM_NAME", roomName) // Pass room name to the new activity
+                        intent.putExtra("USER_ID", userId.toInt())
+                        startActivity(intent)
+                    }
+                }
+                roomLayout.addView(setupButton)
+            }
+        }
     }
 
     private fun storeRoomBoundary(roomName: String): Pair<Pair<Float, Float>, Pair<Float, Float>> {
@@ -154,56 +221,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
         return boundary
     }
 
-    private fun updateButtonStates(roomName: String, inProgress: Boolean) {
-        for (i in 0 until roomsContainer.childCount) {
-            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
-            val roomLabel = roomLayout.getChildAt(0) as TextView
-            val startButton = roomLayout.getChildAt(2) as Button
-            val stopButton = roomLayout.getChildAt(3) as Button
-
-            if (roomLabel.text == roomName) {
-                startButton.isEnabled = !inProgress
-                stopButton.isEnabled = inProgress
-            }
-        }
-    }
-
-    private fun hideAllButtons() {
-        for (i in 0 until roomsContainer.childCount) {
-            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
-            roomLayout.getChildAt(2).visibility = View.GONE
-            roomLayout.getChildAt(3).visibility = View.GONE
-        }
-    }
-
-    private fun highlightRoom(roomName: String, color: Int) {
-        for (i in 0 until roomsContainer.childCount) {
-            val roomLayout = roomsContainer.getChildAt(i) as LinearLayout
-            val roomLabel = roomLayout.getChildAt(0) as TextView
-
-            if (roomLabel.text == roomName) {
-                roomLayout.setBackgroundColor(color)
-                break
-            }
-        }
-    }
-
     private fun startLocationUpdates() {
-        if (checkPermissions()) {
-            // First try GPS
-//            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-//                Toast.makeText(this, "GPS USED", Toast.LENGTH_SHORT).show()
-//                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0.5f, this)
-//            }else if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED){
-//                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0.5f, this)
-//                Toast.makeText(this, "WIFI USED", Toast.LENGTH_SHORT).show()
-//            }
-
-            // Then add Network Provider as a backup
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "WIFI USED", Toast.LENGTH_SHORT).show()
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0.5f, this)
-            }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 100, 1f, this)
         } else {
             requestPermissions()
         }
@@ -217,20 +237,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
         val latitude = location.latitude.toFloat()
         val longitude = location.longitude.toFloat()
 
-        Handler(Looper.getMainLooper()).post {
-            coordinatesText.text = "Coordinates: ($latitude, $longitude)"
-        }
+        coordinatesText.text = "Coordinates: ($latitude, $longitude)"
+        userLocationView.updateUserLocation(latitude, longitude)
 
         if (isCalibrating) {
             currentRoomCoordinates.add(Pair(latitude, longitude))
             Log.d("GeoTag", "Captured coordinates: ($latitude, $longitude)")
         }
-    }
-
-    private fun checkPermissions(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestPermissions() {
@@ -239,12 +252,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
         )
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
-    ) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1 && grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == 1 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startLocationUpdates()
         } else {
             Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()

@@ -9,7 +9,9 @@ appcompat = "1.6.1"
 material = "1.10.0"
 activity = "1.9.3"
 constraintlayout = "2.1.4"
-
+playServicesLocation = "21.0.1"
+tens = "2.12.0"
+litertSupportApi = "0.4.3"
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -19,8 +21,13 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+gms-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+tensorflow = {group="org.tensorflow",name="tensorflow-lite",version.ref="tens"}
+litert-support-api = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "litertSupportApi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+
+
 

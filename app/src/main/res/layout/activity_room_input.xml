@@ -1,0 +1,21 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/roomCountInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter the number of rooms"
+        android:inputType="number" />
+
+    <Button
+        android:id="@+id/submitRoomCountButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Submit"
+        android:layout_below="@id/roomCountInput"
+        android:layout_marginTop="8dp"
+        android:layout_centerHorizontal="true" />
+</RelativeLayout>
