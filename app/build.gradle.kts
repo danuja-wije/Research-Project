@@ -48,4 +48,5 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(libs.gms.location)
     implementation(libs.tensorflow)
+    implementation(libs.lottie)
 }
