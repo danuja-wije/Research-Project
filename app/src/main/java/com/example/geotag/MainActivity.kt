@@ -36,11 +36,14 @@ class MainActivity : AppCompatActivity(), LocationListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+//        userLocationView = findViewById(R.id.userLocationView)
 
+        // Set loading state until calibration is complete
+//        userLocationView.setLoading(true)
         roomsContainer = findViewById(R.id.roomsContainer)
         coordinatesText = findViewById(R.id.coordinatesText)
-        userLocationView = findViewById(R.id.userLocationView)
-
+//        userLocationView = findViewById(R.id.userLocationView)
+//
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         // Get room count and userId from intent
@@ -91,11 +94,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
             }
 
             val startButton = Button(this).apply {
+
                 text = "Start"
                 setOnClickListener { startCalibration(roomName) }
             }
 
             val stopButton = Button(this).apply {
+
                 text = "Stop"
                 isEnabled = false
                 setOnClickListener { stopCalibration(roomName, rangeLabel) }
@@ -164,7 +169,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
             val boundary = storeRoomBoundary(roomName)
             rangeLabel.text = "Range: ${boundary.first} to ${boundary.second}"
 
-            // Use userId for saving calibrated room
+//            userLocationView.addRoom(roomName, boundary.first.second * 100, boundary.first.first * 100)
+//            userLocationView.setLoading(false) // End loading after calibration
+addSetupRoomButton(roomName)
             roomDbHelper.saveCalibratedRoom(
                 userId,
                 roomName,
@@ -173,9 +180,6 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 boundary.second.first,
                 boundary.second.second
             )
-
-            // Add "Setup Room" button dynamically for the calibrated room
-            addSetupRoomButton(roomName)
             calibratedRooms++
         } else {
             Toast.makeText(this, "No coordinates captured for $roomName", Toast.LENGTH_SHORT).show()
@@ -196,6 +200,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
             if (roomLabel.text == roomName) {
                 val setupButton = Button(this).apply {
                     text = "Setup Room"
+                    setBackgroundColor(Color.rgb(33,150,243))
+                    setTextColor(Color.WHITE)
                     setOnClickListener {
                         val intent = Intent(this@MainActivity, RoomSetupActivity::class.java)
                         intent.putExtra("ROOM_NAME", roomName) // Pass room name to the new activity
@@ -238,8 +244,12 @@ class MainActivity : AppCompatActivity(), LocationListener {
         val longitude = location.longitude.toFloat()
 
         coordinatesText.text = "Coordinates: ($latitude, $longitude)"
-        userLocationView.updateUserLocation(latitude, longitude)
 
+        // Scale coordinates for view dimensions (assuming map-like proportions)
+        val x = longitude * 100
+        val y = latitude * 100
+//        userLocationView.updateUserLocation(x, y)
+//
         if (isCalibrating) {
             currentRoomCoordinates.add(Pair(latitude, longitude))
             Log.d("GeoTag", "Captured coordinates: ($latitude, $longitude)")

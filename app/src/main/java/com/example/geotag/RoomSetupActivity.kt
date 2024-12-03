@@ -6,6 +6,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.sqrt
@@ -26,6 +28,14 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
 
     private var lastUpdateTime: Long = 0
     private val UPDATE_INTERVAL = 100
+
+    private var lastAcceleration: Float = 0f
+    private var lastMovementTime: Long = 0
+    private val MOVEMENT_THRESHOLD = 0.5f
+    private val REDUCTION_DELAY = 3000L // 3 seconds after stopping
+    private val REDUCTION_STEP = 10
+
+    private val handler = Handler(Looper.getMainLooper())
 
     data class Light(var name: String, var brightness: Int, var manualControl: Boolean)
 
@@ -88,6 +98,7 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
     override fun onPause() {
         super.onPause()
         sensorManager.unregisterListener(this)
+        handler.removeCallbacksAndMessages(null) // Stop any ongoing reductions
     }
 
     private fun generateLightFields(count: Int) {
@@ -178,15 +189,41 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
                 val y = it.values[1]
                 val z = it.values[2]
                 val acceleration = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
-                val brightness = accelerationToBrightness(acceleration)
 
-                runOnUiThread {
-                    lightDetails.forEachIndexed { index, light ->
-                        if (!light.manualControl) {
-                            light.brightness = brightness
-                            brightnessSeekBars[index]?.progress = brightness
-                        }
+                if (acceleration > MOVEMENT_THRESHOLD) {
+                    // Movement detected, update brightness
+                    lastMovementTime = currentTime
+                    val brightness = accelerationToBrightness(acceleration)
+                    updateBrightness(brightness)
+                } else {
+                    // No movement, start gradual reduction after threshold
+                    if (currentTime - lastMovementTime > REDUCTION_DELAY) {
+                        handler.postDelayed({ reduceBrightnessGradually() }, REDUCTION_STEP.toLong())
                     }
+                }
+            }
+        }
+    }
+
+    private fun reduceBrightnessGradually() {
+        lightDetails.forEachIndexed { index, light ->
+            if (!light.manualControl && light.brightness > 0) {
+                light.brightness = (light.brightness - REDUCTION_STEP).coerceAtLeast(0)
+                brightnessSeekBars[index]?.progress = light.brightness
+            }
+        }
+
+        if (lightDetails.any { !it.manualControl && it.brightness > 0 }) {
+            handler.postDelayed({ reduceBrightnessGradually() }, REDUCTION_STEP.toLong())
+        }
+    }
+
+    private fun updateBrightness(brightness: Int) {
+        runOnUiThread {
+            lightDetails.forEachIndexed { index, light ->
+                if (!light.manualControl) {
+                    light.brightness = brightness
+                    brightnessSeekBars[index]?.progress = brightness
                 }
             }
         }

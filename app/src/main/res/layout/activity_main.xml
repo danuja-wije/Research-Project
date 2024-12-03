@@ -1,28 +1,42 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#FFFFFF"
     android:padding="16dp">
 
+
+    <TextView
+        android:id="@+id/textView5"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginStart="83dp"
+        android:layout_marginTop="30dp"
+        android:text="Calibrate Your Room"
+        android:textColor="@color/black"
+        android:textSize="24sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/coordinatesText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginStart="1dp"
+        android:layout_marginTop="106dp"
         android:text="Coordinates: (0, 0)"
-        android:textSize="18sp" />
-
-    <com.example.geotag.UserLocationView
-        android:id="@+id/userLocationView"
-        android:layout_width="match_parent"
-        android:layout_height="300dp"
-        android:layout_below="@id/coordinatesText"
-        android:layout_marginTop="16dp" />
+        android:textAlignment="center"
+        android:textColor="#000000"
+        android:textSize="18sp"
+        android:textStyle="italic" />
 
     <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/userLocationView"
-        android:layout_marginTop="16dp">
+        android:layout_width="384dp"
+        android:layout_height="551dp"
+        android:layout_below="@+id/coordinatesText"
+        android:layout_marginTop="51dp">
 
         <LinearLayout
             android:id="@+id/roomsContainer"
@@ -30,4 +44,5 @@
             android:layout_height="wrap_content"
             android:orientation="vertical" />
     </ScrollView>
+
 </RelativeLayout>

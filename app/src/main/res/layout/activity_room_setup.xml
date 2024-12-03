@@ -16,8 +16,9 @@
         android:id="@+id/generateLightsButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Generate Lights"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#2196F3"
+        android:text="Generate Lights" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -35,5 +36,6 @@
         android:id="@+id/saveButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:backgroundTint="#2196F3"
         android:text="Save" />
 </LinearLayout>
