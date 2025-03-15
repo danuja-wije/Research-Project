@@ -84,7 +84,33 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         db.execSQL("DROP TABLE IF EXISTS $TABLE_USERS")
         onCreate(db)
     }
+    fun getRoomLabelForBSSID(bssid: String): String? {
+        val db = this.readableDatabase
+        val cursor: Cursor = db.query(
+            TABLE_ROOMS,                // The table containing room data
+            arrayOf(COLUMN_ROOM_NAME),  // Column storing the room name/label
+            "$COLUMN_ROOM_NAME = ?",    // Query condition (you could also have a dedicated column for BSSID if you store that)
+            arrayOf(bssid),             // BSSID as the query parameter
+            null, null, null
+        )
 
+        var label: String? = null
+        if (cursor.moveToFirst()) {
+            label = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ROOM_NAME))
+        }
+        cursor.close()
+        return label
+    }
+    // In RoomDatabaseHelper.kt
+    fun deleteCalibratedRoom(userId: Int, roomName: String) {
+        val db = writableDatabase
+        db.delete(
+            "CalibratedRooms",
+            "userId=? AND roomName=?",
+            arrayOf(userId.toString(), roomName)
+        )
+        db.close()
+    }
     // User management
     fun registerUser(email: String, password: String): Long {
         val db = writableDatabase

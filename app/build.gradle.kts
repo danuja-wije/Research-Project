@@ -49,4 +49,5 @@ dependencies {
     implementation(libs.gms.location)
     implementation(libs.tensorflow)
     implementation(libs.lottie)
+    implementation(libs.okhttp)
 }

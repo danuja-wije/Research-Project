@@ -52,7 +52,9 @@ class CalibratedRoomsActivity : AppCompatActivity() {
             }
 
             val roomLabel = TextView(this).apply {
-                text = "Room: ${room.roomName}\nLat: (${room.minLat}, ${room.maxLat})\nLon: (${room.minLon}, ${room.maxLon})"
+                text = "Room: ${room.roomName}\n" +
+                        "Lat: (${room.minLat}, ${room.maxLat})\n" +
+                        "Lon: (${room.minLon}, ${room.maxLon})"
                 textSize = 16f
             }
 
@@ -67,8 +69,28 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 }
             }
 
+            // 1) Create a "Delete Room" button
+            val deleteButton = Button(this).apply {
+                text = "Delete Room"
+                setOnClickListener {
+                    // 2) Call the DB helper to remove this room
+                    roomDbHelper.deleteCalibratedRoom(userId, room.roomName)
+
+                    // 3) Refresh the rooms list
+                    val updatedRooms = roomDbHelper.getCalibratedRooms(userId)
+                    if (updatedRooms.isEmpty()) {
+                        roomsContainer.removeAllViews()
+                        displayNoRoomsMessage()
+                    } else {
+                        displayRooms(updatedRooms, userId)
+                    }
+                }
+            }
+
+            // 4) Add views to the layout
             roomLayout.addView(roomLabel)
             roomLayout.addView(setupButton)
+            roomLayout.addView(deleteButton)
             roomsContainer.addView(roomLayout)
         }
     }
