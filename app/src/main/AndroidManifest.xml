@@ -44,7 +44,6 @@
         <activity
             android:name=".RoomOptionsActivity"
             android:exported="false" />
-
         <activity
             android:name=".CalibratedRoomsActivity"
             android:exported="false" />

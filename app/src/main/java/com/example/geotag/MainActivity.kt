@@ -44,8 +44,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // In onCreate(), after showConnectionToast(), add the following line:
-        startService(Intent(this, LocationLoggingService::class.java))
+
         // Initialize UI elements
         roomsContainer = findViewById(R.id.roomsContainer)
         coordinatesText = findViewById(R.id.coordinatesText)
@@ -190,7 +189,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         if (wifiManager != null && wifiManager.isWifiEnabled) {
             Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "Using GPS", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -262,7 +261,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
             if (location != null) {
                 val lat = location.latitude
                 val lon = location.longitude
-                coordinatesText.text = "GPS: ($lat, $lon) Calibrating $roomName..."
+                coordinatesText.text = "($lat, $lon) Calibrating $roomName..."
                 currentRoomCoordinates.add(Pair(lat.toFloat(), lon.toFloat()))
             } else {
                 coordinatesText.text = "Coordinates: (unknown) Calibrating $roomName..."

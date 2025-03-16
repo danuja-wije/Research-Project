@@ -21,7 +21,7 @@ class MoveLogger(private val serverUrl: String) {
         getUserDetails: () -> String
     ) {
         timer = Timer()
-        timer?.scheduleAtFixedRate(0, 10) { // 10,000ms = 10 sec
+        timer?.scheduleAtFixedRate(0, 10000) { // 10,000ms = 10 sec
             logUserMove(getLatitude(), getLongitude(), getRoom(), getUserDetails())
         }
     }

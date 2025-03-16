@@ -32,10 +32,43 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
     private var lastAcceleration: Float = 0f
     private var lastMovementTime: Long = 0
     private val MOVEMENT_THRESHOLD = 0.5f
-    private val REDUCTION_DELAY = 3000L // 3 seconds after stopping
+
+    // After 3 seconds of no movement, we start reducing brightness
+    private val REDUCTION_DELAY = 3000L
     private val REDUCTION_STEP = 10
 
+    // ---------------------------------------------
+    // For delayed brightness updates
+    // ---------------------------------------------
+    private var rawBrightnessValue = 0          // "Incoming" brightness
+    private var displayedBrightnessValue = 0    // The actual brightness we apply to non-manual lights
+
+    // If you want a 10-minute delay, 600,000 ms is correct
+    private val BRIGHTNESS_UPDATE_DELAY = 600_000L // 600,000 ms = 10 minutes
+
+    private val brightnessHandler = Handler(Looper.getMainLooper())
+    private val brightnessRunnable = object : Runnable {
+        override fun run() {
+            // Final smoothing step after the delay
+            displayedBrightnessValue = (displayedBrightnessValue + rawBrightnessValue) / 2
+
+            // Floor and ceiling
+            if (displayedBrightnessValue < MIN_BRIGHTNESS_FLOOR) {
+                displayedBrightnessValue = MIN_BRIGHTNESS_FLOOR.toInt()
+            }
+            if (displayedBrightnessValue > 255) {
+                displayedBrightnessValue = 255
+            }
+
+            actuallyUpdateBrightness(displayedBrightnessValue.toInt())
+        }
+    }
+    // ---------------------------------------------
+
     private val handler = Handler(Looper.getMainLooper())
+
+    // NEW: Minimum brightness floor
+    private val MIN_BRIGHTNESS_FLOOR = 50
 
     data class Light(var name: String, var brightness: Int, var manualControl: Boolean)
 
@@ -99,6 +132,9 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
         super.onPause()
         sensorManager.unregisterListener(this)
         handler.removeCallbacksAndMessages(null) // Stop any ongoing reductions
+
+        // Clear out our brightness delay logic
+        brightnessHandler.removeCallbacks(brightnessRunnable)
     }
 
     private fun generateLightFields(count: Int) {
@@ -151,7 +187,6 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) light.brightness = progress
                 }
-
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
@@ -179,6 +214,7 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
         lightsContainer.addView(lightLayout)
     }
 
+    // Sensor logic
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
             val currentTime = System.currentTimeMillis()
@@ -191,10 +227,10 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
                 val acceleration = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
 
                 if (acceleration > MOVEMENT_THRESHOLD) {
-                    // Movement detected, update brightness
+                    // Movement detected
                     lastMovementTime = currentTime
                     val brightness = accelerationToBrightness(acceleration)
-                    updateBrightness(brightness)
+                    queueBrightnessUpdate(brightness)
                 } else {
                     // No movement, start gradual reduction after threshold
                     if (currentTime - lastMovementTime > REDUCTION_DELAY) {
@@ -205,37 +241,66 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    private fun reduceBrightnessGradually() {
-        lightDetails.forEachIndexed { index, light ->
-            if (!light.manualControl && light.brightness > 0) {
-                light.brightness = (light.brightness - REDUCTION_STEP).coerceAtLeast(0)
-                brightnessSeekBars[index]?.progress = light.brightness
-            }
-        }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-        if (lightDetails.any { !it.manualControl && it.brightness > 0 }) {
-            handler.postDelayed({ reduceBrightnessGradually() }, REDUCTION_STEP.toLong())
+    // Instead of updating lights immediately, we store a "raw" brightness
+    // then do an immediate partial update + schedule a delayed "moving average" update
+    private fun queueBrightnessUpdate(brightness: Int) {
+        // 1) Store incoming brightness
+        rawBrightnessValue = brightness
+
+        // 2) Immediate partial update so the user sees progress move right away
+        displayedBrightnessValue = (displayedBrightnessValue + rawBrightnessValue) / 2
+        if (displayedBrightnessValue < MIN_BRIGHTNESS_FLOOR) {
+            displayedBrightnessValue = MIN_BRIGHTNESS_FLOOR.toFloat().toInt()
         }
+        if (displayedBrightnessValue > 255) {
+            displayedBrightnessValue = 255
+        }
+        actuallyUpdateBrightness(displayedBrightnessValue.toInt())
+
+        // 3) Cancel any previous pending update
+        brightnessHandler.removeCallbacks(brightnessRunnable)
+        // 4) Post the final smoothing step after the full delay
+        brightnessHandler.postDelayed(brightnessRunnable, BRIGHTNESS_UPDATE_DELAY)
     }
 
-    private fun updateBrightness(brightness: Int) {
+    // Actually apply the brightness to non-manual lights
+    private fun actuallyUpdateBrightness(finalBrightness: Int) {
         runOnUiThread {
+            val clamped = finalBrightness.coerceIn(MIN_BRIGHTNESS_FLOOR, 255)
             lightDetails.forEachIndexed { index, light ->
                 if (!light.manualControl) {
-                    light.brightness = brightness
-                    brightnessSeekBars[index]?.progress = brightness
+                    light.brightness = clamped
+                    brightnessSeekBars[index]?.progress = clamped
                 }
             }
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    private fun reduceBrightnessGradually() {
+        lightDetails.forEachIndexed { index, light ->
+            if (!light.manualControl && light.brightness > MIN_BRIGHTNESS_FLOOR) {
+                // Decrease brightness but never drop below the floor
+                light.brightness = (light.brightness - REDUCTION_STEP)
+                    .coerceAtLeast(MIN_BRIGHTNESS_FLOOR)
+                brightnessSeekBars[index]?.progress = light.brightness
+            }
+        }
+        // If any light is still above floor, keep reducing
+        if (lightDetails.any { !it.manualControl && it.brightness > MIN_BRIGHTNESS_FLOOR }) {
+            handler.postDelayed({ reduceBrightnessGradually() }, REDUCTION_STEP.toLong())
+        }
+    }
 
+    // Convert acceleration to brightness in [MIN_BRIGHTNESS_FLOOR..255]
     private fun accelerationToBrightness(acceleration: Float): Int {
         val minAcceleration = 0f
         val maxAcceleration = 12f
         val clampedAcceleration = acceleration.coerceIn(minAcceleration, maxAcceleration)
-        return ((clampedAcceleration / maxAcceleration) * 255).toInt()
+        val scaled = ((clampedAcceleration / maxAcceleration) * 255).toInt()
+
+        return scaled.coerceAtLeast(MIN_BRIGHTNESS_FLOOR).coerceAtMost(255)
     }
 
     override fun onSupportNavigateUp(): Boolean {

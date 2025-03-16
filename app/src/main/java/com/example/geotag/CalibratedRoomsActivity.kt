@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
+
 class CalibratedRoomsActivity : AppCompatActivity() {
 
     private lateinit var roomDbHelper: RoomDatabaseHelper

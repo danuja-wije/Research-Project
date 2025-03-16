@@ -1,145 +1,134 @@
-package com.example.geotag
+package com.example.motionapp
 
-import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.os.Parcel
-import android.os.Parcelable
-import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
-import java.io.FileInputStream
-import java.nio.MappedByteBuffer
-import java.nio.channels.FileChannel
+import androidx.appcompat.app.AppCompatActivity
+import com.example.geotag.R
 import kotlin.math.sqrt
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 
-
-class MotionActivity() : AppCompatActivity(), SensorEventListener, Parcelable {
+class MotionActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
 
-    private lateinit var brightnessSeekBar: SeekBar
+    // UI references
     private lateinit var brightnessLabel: TextView
-    private lateinit var interpreter: Interpreter
-    private var lastUpdateTime: Long = 0
-    private val UPDATE_INTERVAL = 100
+    private lateinit var brightnessSeekBar: SeekBar
 
-    constructor(parcel: Parcel,context: Context) : this() {
-        lastUpdateTime = parcel.readLong()
+    // Raw motion reading from accelerometer (floored at MIN_BRIGHTNESS)
+    private var rawMotionValue = 0f
+    // Smoothed brightness we display in [MIN_BRIGHTNESS..MAX_BRIGHTNESS]
+    private var displayedBrightness = 0f
+
+    // Constants
+    private val MIN_BRIGHTNESS = 50f           // Minimum brightness floor
+    private val MAX_BRIGHTNESS = 255f          // SeekBar max
+    private val MOTION_UPDATE_DELAY = 60_000L  // 60 seconds
+
+    // Handler to post delayed updates
+    private val handler = Handler(Looper.getMainLooper())
+
+    // Runnable that applies a moving average after a 60-second delay
+    private val delayedMotionRunnable = object : Runnable {
+        override fun run() {
+            // Blend old displayed brightness with new raw motion-based brightness
+            displayedBrightness = (displayedBrightness + rawMotionValue) / 2f
+
+            // Always clamp displayedBrightness to [MIN_BRIGHTNESS..MAX_BRIGHTNESS]
+            if (displayedBrightness < MIN_BRIGHTNESS) {
+                displayedBrightness = MIN_BRIGHTNESS
+            }
+            if (displayedBrightness > MAX_BRIGHTNESS) {
+                displayedBrightness = MAX_BRIGHTNESS
+            }
+
+            updateBrightnessUI(displayedBrightness)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_motion)
 
-        brightnessSeekBar = findViewById(R.id.brightnessSeekBar)
+        // Initialize UI
         brightnessLabel = findViewById(R.id.brightnessLabel)
+        brightnessSeekBar = findViewById(R.id.brightnessSeekBar)
 
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        // Initialize SensorManager and get the accelerometer
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-
-        brightnessSeekBar.max = 255
-        brightnessSeekBar.progress = 0
-        brightnessSeekBar.isEnabled = false
-        val model = loadModelFile( "model")
-        val interpreter = model?.let { Interpreter(it) }
+        if (accelerometer == null) {
+            Toast.makeText(this, "No Accelerometer found!", Toast.LENGTH_LONG).show()
+            finish()
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        accelerometer?.also { accel ->
-            sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_NORMAL)
+        // Register accelerometer listener
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
     }
 
     override fun onPause() {
         super.onPause()
+        // Unregister listener to save battery
         sensorManager.unregisterListener(this)
+        // Remove any pending delayed updates
+        handler.removeCallbacks(delayedMotionRunnable)
     }
-    fun predict(inputData: FloatArray): FloatArray {
-        val inputShape = interpreter.getInputTensor(0).shape()
-        val inputDataType = interpreter.getInputTensor(0).dataType()
-        val inputBuffer = TensorBuffer.createFixedSize(inputShape, inputDataType)
-        inputBuffer.loadArray(inputData)
 
-        val outputShape = interpreter.getOutputTensor(0).shape()
-        val outputDataType = interpreter.getOutputTensor(0).dataType()
-        val outputBuffer = TensorBuffer.createFixedSize(outputShape, outputDataType)
-
-        interpreter.run(inputBuffer.buffer, outputBuffer.buffer)
-
-        return outputBuffer.floatArray
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not used
     }
+
     override fun onSensorChanged(event: SensorEvent?) {
-        event?.let {
-            val currentTime = System.currentTimeMillis()
-            if ((currentTime - lastUpdateTime) > UPDATE_INTERVAL) {
-                lastUpdateTime = currentTime
-                
-                val x = it.values[0]
-                val y = it.values[1]
-                val z = it.values[2]
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            val x = event.values[0]
+            val y = event.values[1]
+            val z = event.values[2]
 
-                val acceleration = sqrt(x * x + y * y + z * z) - SensorManager.GRAVITY_EARTH
+            // Compute "motion magnitude" - subtract gravity if you want pure movement
+            val gravity = 9.81f
+            val magnitude = sqrt(x*x + y*y + z*z) - gravity
+            // Ensure no negative
+            val motionValue = magnitude.coerceAtLeast(0f)
 
-                val brightness = accelerationToBrightness(acceleration)
+            // Convert motionValue into [MIN_BRIGHTNESS..MAX_BRIGHTNESS] range
+            // e.g., multiply by 25, then clamp
+            val scaledValue = motionValue * 25f
+            rawMotionValue = scaledValue.coerceAtLeast(MIN_BRIGHTNESS).coerceAtMost(MAX_BRIGHTNESS)
 
-                runOnUiThread {
-                    brightnessSeekBar.progress = brightness
-                    brightnessLabel.text = "Brightness: $brightness"
-                }
+            // If rawMotionValue is above MIN_BRIGHTNESS, device is "moving"
+            // so we schedule a delayed average update
+            if (rawMotionValue > MIN_BRIGHTNESS) {
+                // Cancel any existing callback
+                handler.removeCallbacks(delayedMotionRunnable)
+                // Schedule a new update 60 seconds from now
+                handler.postDelayed(delayedMotionRunnable, MOTION_UPDATE_DELAY)
+            } else {
+                // If effectively "stopped," set displayed brightness to floor immediately
+                displayedBrightness = MIN_BRIGHTNESS
+                updateBrightnessUI(displayedBrightness)
+                // Cancel delayed updates
+                handler.removeCallbacks(delayedMotionRunnable)
             }
         }
     }
-//Loading Predictive model
-private fun loadModelFile(modelFileName: String): MappedByteBuffer? {
-    try {
-        val assetFileDescriptor = assets.openFd(modelFileName)
-        val fileInputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
-        val fileChannel = fileInputStream.channel
 
-    }catch (e:Exception){
-        Log.d("GeoTag", "Model loded error")
-    }finally {
-        return null
-    }
-}
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-       
-    }
-
-    private fun accelerationToBrightness(acceleration: Float): Int {
-        val minAcceleration = 0f
-        val maxAcceleration = 12f // Adjust this value when testing
-
-        val clampedAcceleration = acceleration.coerceIn(minAcceleration, maxAcceleration)
-
-        return ((clampedAcceleration / maxAcceleration) * 255).toInt()
-    }
-
-    override fun writeToParcel(parcel: Parcel, flags: Int) {
-        parcel.writeLong(lastUpdateTime)
-    }
-
-    override fun describeContents(): Int {
-        return 0
-    }
-
-    companion object CREATOR : Parcelable.Creator<MotionActivity> {
-        override fun createFromParcel(parcel: Parcel): MotionActivity {
-            return MotionActivity()
-        }
-
-        override fun newArray(size: Int): Array<MotionActivity?> {
-            return arrayOfNulls(size)
-        }
+    private fun updateBrightnessUI(value: Float) {
+        // Round to int for display
+        val brightnessInt = value.toInt().coerceIn(MIN_BRIGHTNESS.toInt(), MAX_BRIGHTNESS.toInt())
+        brightnessLabel.text = "Brightness: $brightnessInt"
+        brightnessSeekBar.progress = brightnessInt
     }
 }

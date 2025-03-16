@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+
     data class Room(
         val roomName: String,
         val minLat: Float,
@@ -14,13 +15,13 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         val minLon: Float,
         val maxLon: Float
     )
+
     companion object {
         private const val DATABASE_NAME = "GeoTag.db"
         private const val DATABASE_VERSION = 2
 
         // User table
         private const val TABLE_USERS = "Users"
-        private const val COLUMN_USER_ID = "userId"
         private const val COLUMN_EMAIL = "email"
         private const val COLUMN_PASSWORD = "password"
 
@@ -31,6 +32,7 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         private const val COLUMN_MAX_LAT = "maxLat"
         private const val COLUMN_MIN_LON = "minLon"
         private const val COLUMN_MAX_LON = "maxLon"
+        private const val COLUMN_USER_ID = "userId"
 
         // Lights table
         private const val TABLE_LIGHTS = "Lights"
@@ -84,16 +86,20 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         db.execSQL("DROP TABLE IF EXISTS $TABLE_USERS")
         onCreate(db)
     }
+
+    /**
+     * Optional example if you store BSSID in the same table as roomName.
+     * If you have a separate BSSID column, adjust the query accordingly.
+     */
     fun getRoomLabelForBSSID(bssid: String): String? {
         val db = this.readableDatabase
         val cursor: Cursor = db.query(
-            TABLE_ROOMS,                // The table containing room data
-            arrayOf(COLUMN_ROOM_NAME),  // Column storing the room name/label
-            "$COLUMN_ROOM_NAME = ?",    // Query condition (you could also have a dedicated column for BSSID if you store that)
-            arrayOf(bssid),             // BSSID as the query parameter
+            TABLE_ROOMS,
+            arrayOf(COLUMN_ROOM_NAME),
+            "$COLUMN_ROOM_NAME = ?",
+            arrayOf(bssid),
             null, null, null
         )
-
         var label: String? = null
         if (cursor.moveToFirst()) {
             label = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ROOM_NAME))
@@ -101,16 +107,17 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         cursor.close()
         return label
     }
-    // In RoomDatabaseHelper.kt
+
     fun deleteCalibratedRoom(userId: Int, roomName: String) {
         val db = writableDatabase
         db.delete(
-            "CalibratedRooms",
-            "userId=? AND roomName=?",
+            TABLE_ROOMS,
+            "$COLUMN_USER_ID=? AND $COLUMN_ROOM_NAME=?",
             arrayOf(userId.toString(), roomName)
         )
         db.close()
     }
+
     // User management
     fun registerUser(email: String, password: String): Long {
         val db = writableDatabase
@@ -135,9 +142,18 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         }
     }
 
-    // Calibrated rooms management
-    fun saveCalibratedRoom(userId: Int, roomName: String, minLat: Float, maxLat: Float, minLon: Float, maxLon: Float) {
+    /**
+     * Saves a room bounding box, ensuring minLat <= maxLat and minLon <= maxLon.
+     */
+    fun saveCalibratedRoom(userId: Int, roomName: String, lat1: Float, lat2: Float, lon1: Float, lon2: Float) {
         val db = writableDatabase
+
+        // Ensure correct bounding box order
+        val minLat = minOf(lat1, lat2)
+        val maxLat = maxOf(lat1, lat2)
+        val minLon = minOf(lon1, lon2)
+        val maxLon = maxOf(lon1, lon2)
+
         val values = ContentValues().apply {
             put(COLUMN_USER_ID, userId)
             put(COLUMN_ROOM_NAME, roomName)
@@ -149,6 +165,9 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         db.insertWithOnConflict(TABLE_ROOMS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    /**
+     * Retrieves all rooms for the given userId.
+     */
     fun getCalibratedRooms(userId: Int): List<Room> {
         val db = readableDatabase
         val rooms = mutableListOf<Room>()
@@ -175,6 +194,7 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         }
         return rooms
     }
+
     // Light management
     fun saveLights(roomName: String, lights: List<RoomSetupActivity.Light>) {
         val db = writableDatabase
