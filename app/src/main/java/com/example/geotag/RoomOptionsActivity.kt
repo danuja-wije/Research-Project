@@ -269,11 +269,11 @@ class RoomOptionsActivity : AppCompatActivity() {
             }
         }
 
-        if (matchedRoomName != null) {
-            actualRoomTextView.text = "Actual Current Room: $matchedRoomName"
-        } else {
-            actualRoomTextView.text = "Actual Current Room: No Matched Room"
-        }
+//        if (matchedRoomName != null) {
+//            actualRoomTextView.text = "Actual Current Room: $matchedRoomName"
+//        } else {
+//            actualRoomTextView.text = "Actual Current Room: No Matched Room"
+//        }
     }
 
     private fun checkLocationAgainstDatabase(
