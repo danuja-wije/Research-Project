@@ -120,7 +120,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
 
         // Insert multiple dummy rooms if no rooms exist yet
-        //maybeInsertMultipleDummyRooms()
+        maybeInsertMultipleDummyRooms()
 
         // Button actions
         recalibrateButton.setOnClickListener {
@@ -159,30 +159,30 @@ class RoomOptionsActivity : AppCompatActivity() {
         checkLocationPermission()
     }
 
-//    private fun maybeInsertMultipleDummyRooms() {
-//        val existingRooms = roomDbHelper.getCalibratedRooms(userId.toString())
-//        if (existingRooms.isEmpty()) {
-//            // Insert multiple bounding boxes
-//            roomDbHelper.saveCalibratedRoom(
-//                userId,
-//                "Room 1",
-//                37.34393f,   // lat1
-//                37.34526f,   // lat2
-//                -122.09662f, // lon1
-//                -122.09446f  // lon2
-//            )
-//            roomDbHelper.saveCalibratedRoom(
-//                userId,
-//                "Room 2",
-//                30.355f,   // lat1 (min)
-//                38.357f,   // lat2 (max)
-//                -124.093f, // lon1 (min, more negative)
-//                -40.095f   // lon2 (max, less negative)
-//            )
-//
-//            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
-//        }
-//    }
+    private fun maybeInsertMultipleDummyRooms() {
+        val existingRooms = roomDbHelper.getCalibratedRooms(userId.toString())
+        if (existingRooms.isEmpty()) {
+            // Insert multiple bounding boxes
+            roomDbHelper.saveCalibratedRoom(
+                userId,
+                "Room 1",
+                37.34393f,   // lat1
+                37.34526f,   // lat2
+                -122.09662f, // lon1
+                -122.09446f  // lon2
+            )
+            roomDbHelper.saveCalibratedRoom(
+                userId,
+                "Room 2",
+                30.355f,   // lat1 (min)
+                38.357f,   // lat2 (max)
+                -124.093f, // lon1 (min, more negative)
+                -40.095f   // lon2 (max, less negative)
+            )
+
+            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onResume() {
         super.onResume()
