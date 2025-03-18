@@ -1,18 +1,24 @@
 package com.example.geotag
 
+import android.Manifest
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
-
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 
 class CalibratedRoomsActivity : AppCompatActivity() {
 
     private lateinit var roomDbHelper: RoomDatabaseHelper
     private lateinit var roomsContainer: LinearLayout
+    // Added Fused Location Provider client
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
 
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_calibrated_rooms)
@@ -26,11 +32,21 @@ class CalibratedRoomsActivity : AppCompatActivity() {
             return
         }
 
-        val rooms = roomDbHelper.getCalibratedRooms(userId)
+        // Original logic to retrieve and display rooms
+        val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
         if (rooms.isEmpty()) {
             displayNoRoomsMessage()
         } else {
             displayRooms(rooms, userId)
+        }
+
+        // Initialize the Fused Location Provider instead of LocationManager
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                // Optionally, use the location to update UI or filter rooms
+                // For example: Log.d("CalibratedRoomsActivity", "Current location: ${location.latitude}, ${location.longitude}")
+            }
         }
     }
 
@@ -70,17 +86,13 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 }
             }
 
-            // 1) Create a "Delete Room" button
             val deleteButton = Button(this).apply {
                 text = "Delete Room"
                 setOnClickListener {
-                    // 2) Call the DB helper to remove this room
                     roomDbHelper.deleteCalibratedRoom(userId, room.roomName)
-
-                    // 3) Refresh the rooms list
-                    val updatedRooms = roomDbHelper.getCalibratedRooms(userId)
+                    val updatedRooms = roomDbHelper.getCalibratedRooms(userId.toString())
+                    roomsContainer.removeAllViews()
                     if (updatedRooms.isEmpty()) {
-                        roomsContainer.removeAllViews()
                         displayNoRoomsMessage()
                     } else {
                         displayRooms(updatedRooms, userId)
@@ -88,7 +100,6 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 }
             }
 
-            // 4) Add views to the layout
             roomLayout.addView(roomLabel)
             roomLayout.addView(setupButton)
             roomLayout.addView(deleteButton)

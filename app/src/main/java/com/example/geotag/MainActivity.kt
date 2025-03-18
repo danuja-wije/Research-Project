@@ -18,7 +18,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.yourapp.MoveLogger
+
 
 class MainActivity : AppCompatActivity(), LocationListener {
 

@@ -2,22 +2,19 @@ package com.example.geotag
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
@@ -25,7 +22,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 
-class RoomOptionsActivity : AppCompatActivity(), LocationListener {
+class RoomOptionsActivity : AppCompatActivity() {
 
     // User ID from intent
     private var userId: Int = -1
@@ -55,7 +52,8 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
     private lateinit var roomDbHelper: RoomDatabaseHelper
 
     // For location updates
-    private lateinit var locationManager: LocationManager
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
     private val LOCATION_REQUEST_CODE = 123
 
     // Store the user’s current coordinates
@@ -75,7 +73,10 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_room_options)
-
+        val serviceIntent = Intent(this, LocationLoggingService::class.java).apply {
+            putExtra("USER_ID", 1)
+        }
+        startService(serviceIntent)
         // Restore predictedRoomName across orientation changes
         savedInstanceState?.let {
             predictedRoomName = it.getString("PREDICTED_ROOM_KEY")
@@ -90,7 +91,16 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
 
         // Initialize DB + location
         roomDbHelper = RoomDatabaseHelper(this)
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        // Initialize locationCallback
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                for (location in locationResult.locations) {
+                    updateLocation(location)
+                }
+            }
+        }
 
         // Initialize UI
         recalibrateButton = findViewById(R.id.recalibrateButton)
@@ -110,7 +120,7 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
         }
 
         // Insert multiple dummy rooms if no rooms exist yet
-        maybeInsertMultipleDummyRooms()
+        //maybeInsertMultipleDummyRooms()
 
         // Button actions
         recalibrateButton.setOnClickListener {
@@ -149,38 +159,30 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
         checkLocationPermission()
     }
 
-    /**
-     * If no rooms exist for this user, insert multiple dummy bounding boxes
-     * so we can test the matching logic.
-     *
-     * For example:
-     *  - "Dummy Room 1": lat range [37.34393..37.34526], lon range [-122.09662..-122.09446]
-     *  - "Dummy Room 2": lat range [37.355..37.357], lon range [-122.095..-122.093]
-     */
-    private fun maybeInsertMultipleDummyRooms() {
-        val existingRooms = roomDbHelper.getCalibratedRooms(userId)
-        if (existingRooms.isEmpty()) {
-            // Insert multiple bounding boxes
-            roomDbHelper.saveCalibratedRoom(
-                userId,
-                "Dummy Room 1",
-                37.34393f,   // lat1
-                37.34526f,   // lat2
-                -122.09662f, // lon1
-                -122.09446f  // lon2
-            )
-            roomDbHelper.saveCalibratedRoom(
-                userId,
-                "Dummy Room 2",
-                37.355f,    // lat1
-                37.357f,    // lat2
-                -122.095f,  // lon1
-                -122.093f   // lon2
-            )
-
-            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
-        }
-    }
+//    private fun maybeInsertMultipleDummyRooms() {
+//        val existingRooms = roomDbHelper.getCalibratedRooms(userId.toString())
+//        if (existingRooms.isEmpty()) {
+//            // Insert multiple bounding boxes
+//            roomDbHelper.saveCalibratedRoom(
+//                userId,
+//                "Room 1",
+//                37.34393f,   // lat1
+//                37.34526f,   // lat2
+//                -122.09662f, // lon1
+//                -122.09446f  // lon2
+//            )
+//            roomDbHelper.saveCalibratedRoom(
+//                userId,
+//                "Room 2",
+//                30.355f,   // lat1 (min)
+//                38.357f,   // lat2 (max)
+//                -124.093f, // lon1 (min, more negative)
+//                -40.095f   // lon2 (max, less negative)
+//            )
+//
+//            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
+//        }
+//    }
 
     override fun onResume() {
         super.onResume()
@@ -197,7 +199,7 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
         countdownHandler.removeCallbacks(countdownRunnable)
 
         // Stop location updates
-        locationManager.removeUpdates(this)
+        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -235,52 +237,61 @@ class RoomOptionsActivity : AppCompatActivity(), LocationListener {
 
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                2000L, // update interval (2s for example)
-                1f,    // update distance (1 meter)
-                this
-            )
+        val locationRequest = LocationRequest.create().apply {
+            interval = 2000L
+            fastestInterval = 1000L
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
         }
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
-    override fun onLocationChanged(location: Location) {
-        // 1) Store the current lat/lon
-        currentLatitude = 37.34393
-        currentLongitude = -122.09662
+    private fun updateLocation(location: Location) {
+        currentLatitude = location.latitude
+        currentLongitude = location.longitude
 
-        // 2) Show coords in the UI
         val lat = currentLatitude.toFloat()
         val lon = currentLongitude.toFloat()
         coordinatesText.text = "Coordinates: ($lat, $lon)"
 
-        // 3) Check user’s calibrated rooms
-        val rooms = roomDbHelper.getCalibratedRooms(userId)
+        // Check calibrated rooms
+        val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
         if (rooms.isEmpty()) {
             actualRoomTextView.text = "No calibrated rooms found"
             return
         }
 
-        // 4) Attempt to match lat/lon to a bounding box
         var matchedRoomName: String? = null
         for (room in rooms) {
-            if (lat >= room.minLat && lat <= room.maxLat &&
-                lon >= room.minLon && lon <= room.maxLon
-            ) {
+            if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
                 matchedRoomName = room.roomName
                 break
             }
         }
 
-        // 5) Display the matched room or fallback
         if (matchedRoomName != null) {
             actualRoomTextView.text = "Actual Current Room: $matchedRoomName"
         } else {
-            actualRoomTextView.text = "Actual Current Room: Room 1"
+            actualRoomTextView.text = "Actual Current Room: No Matched Room"
         }
+    }
+
+    private fun checkLocationAgainstDatabase(
+        roomName: String,
+        currentLat: Double,
+        currentLon: Double
+    ): Boolean {
+        val boundaries = roomDbHelper.getRoomBoundaries(roomName)
+        if (boundaries != null) {
+            val (boundary1, boundary2) = boundaries
+            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
+            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
+            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
+            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
+
+            return currentLat in minLat..maxLat && currentLon in minLon..maxLon
+        }
+        return false
     }
 
     private fun fetchPredictedRoom() {

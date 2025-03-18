@@ -25,7 +25,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
-        android:text="GeoTag"
+        android:text="Smarify"
         android:textAlignment="center"
         android:textColor="@color/black"
         android:textSize="48sp"

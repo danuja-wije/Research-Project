@@ -168,7 +168,7 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
     /**
      * Retrieves all rooms for the given userId.
      */
-    fun getCalibratedRooms(userId: Int): List<Room> {
+    fun getCalibratedRooms(userId: String): List<Room> {
         val db = readableDatabase
         val rooms = mutableListOf<Room>()
         val cursor = db.query(
@@ -193,6 +193,34 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
             }
         }
         return rooms
+    }
+
+    /**
+     * Retrieves the boundaries for the given room name.
+     * Returns a Pair where the first element is a Pair(minLat, minLon) and the second is a Pair(maxLat, maxLon).
+     * Returns null if no room is found.
+     */
+    fun getRoomBoundaries(roomName: String): Pair<Pair<Float, Float>, Pair<Float, Float>>? {
+        val db = this.readableDatabase
+        val cursor = db.query(
+            TABLE_ROOMS,
+            arrayOf(COLUMN_MIN_LAT, COLUMN_MAX_LAT, COLUMN_MIN_LON, COLUMN_MAX_LON),
+            "$COLUMN_ROOM_NAME = ?",
+            arrayOf(roomName),
+            null,
+            null,
+            null
+        )
+        var boundaries: Pair<Pair<Float, Float>, Pair<Float, Float>>? = null
+        if (cursor.moveToFirst()) {
+            val minLat = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MIN_LAT))
+            val maxLat = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MAX_LAT))
+            val minLon = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MIN_LON))
+            val maxLon = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MAX_LON))
+            boundaries = Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+        }
+        cursor.close()
+        return boundaries
     }
 
     // Light management

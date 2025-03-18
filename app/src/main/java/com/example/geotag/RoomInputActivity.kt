@@ -6,7 +6,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-private var userId: Int = -1 // Class-level variable for userId
+internal var userId: Int = -1 // Class-level variable for userId
 class RoomInputActivity : AppCompatActivity() {
 
     private lateinit var roomCountInput: EditText
