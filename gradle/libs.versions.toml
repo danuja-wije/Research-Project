@@ -15,6 +15,8 @@ litertSupportApi = "0.4.3"
 lottieVersion = "3.4.0"
 okhttpVersion ="4.9.3"
 firebasePerfKtx = "21.0.4"
+constraintlayoutVersion = "2.1.4"
+androidxConstraintlayout = "2.2.1"
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -23,13 +25,14 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
-androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 gms-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 tensorflow = {group="org.tensorflow",name="tensorflow-lite",version.ref="tens"}
 litert-support-api = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "litertSupportApi" }
 lottie = {group="com.airbnb.android",name="lottie",version.ref = "lottieVersion"}
 okhttp = {group="com.squareup.okhttp3",name="okhttp",version.ref="okhttpVersion"}
 firebase-perf-ktx = { group = "com.google.firebase", name = "firebase-perf-ktx", version.ref = "firebasePerfKtx" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayoutVersion" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "androidxConstraintlayout" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

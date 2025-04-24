@@ -34,18 +34,20 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/geo_tag_logo"
         android:label="@string/app_name"
+        android:theme="@style/Theme.GeoTag"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.GeoTag"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
         <service android:name=".LocationLoggingService" />
         <!-- Example activities -->
         <activity
             android:name=".RoomOptionsActivity"
+            android:theme="@style/Theme.GeoTagblue"
             android:exported="false" />
         <activity
             android:name=".CalibratedRoomsActivity"
+            android:theme="@style/Theme.GeoTagblue"
             android:exported="false" />
 
         <activity
@@ -58,10 +60,12 @@
 
         <activity
             android:name=".RoomSetupActivity"
+            android:theme="@style/Theme.GeoTagblue"
             android:parentActivityName=".MainActivity" />
 
         <activity
             android:name=".RoomInputActivity"
+            android:theme="@style/Theme.GeoTagblue"
             android:exported="false" />
 
         <!-- SplashActivity is the LAUNCHER (entry point) -->
@@ -75,7 +79,10 @@
         </activity>
 
         <!-- MainActivity (the primary activity after Splash) -->
-        <activity android:name=".MainActivity" />
+        <activity android:name=".MainActivity" android:theme="@style/Theme.GeoTagblue" />
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
 
     </application>
 </manifest>

@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
@@ -28,11 +29,13 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var userId: Int = -1
 
     // UI elements
-    private lateinit var recalibrateButton: Button
-    private lateinit var viewRoomsButton: Button
+    private lateinit var recalibrateButton: CardView
+    private lateinit var viewRoomsButton: CardView
 
     // Predicted room display + button
     private lateinit var predictedRoomTextView: TextView
+    private lateinit var lightText: TextView
+
     private lateinit var openPredictedRoomButton: Button
 
     // Actual room display (based on GPS vs. calibrated rooms)
@@ -43,7 +46,7 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var nextPredictionTime: Long = 0L
 
     // Coordinates display
-    private lateinit var coordinatesText: TextView
+//    private lateinit var coordinatesText: TextView
 
     // Holds the currently predicted room name
     private var predictedRoomName: String? = null
@@ -109,9 +112,10 @@ class RoomOptionsActivity : AppCompatActivity() {
         openPredictedRoomButton = findViewById(R.id.openPredictedRoomButton)
         nextPredictionCountdownTextView = findViewById(R.id.nextPredictionCountdownTextView)
         actualRoomTextView = findViewById(R.id.actualRoomTextView)
-        coordinatesText = findViewById(R.id.coordinatesText)
-
-        // If we already had a predicted room, show it
+        lightText = findViewById(R.id.light_text)
+//        coordinatesText = findViewById(R.id.coordinatesText)
+//
+// If we already had a predicted room, show it
         if (!predictedRoomName.isNullOrEmpty()) {
             predictedRoomTextView.text = "Predicted Current Room: $predictedRoomName"
             openPredictedRoomButton.isEnabled = true
@@ -120,7 +124,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
 
         // Insert multiple dummy rooms if no rooms exist yet
-        maybeInsertMultipleDummyRooms()
+//        maybeInsertMultipleDummyRooms()
 
         // Button actions
         recalibrateButton.setOnClickListener {
@@ -159,30 +163,30 @@ class RoomOptionsActivity : AppCompatActivity() {
         checkLocationPermission()
     }
 
-    private fun maybeInsertMultipleDummyRooms() {
-        val existingRooms = roomDbHelper.getCalibratedRooms(userId.toString())
-        if (existingRooms.isEmpty()) {
-            // Insert multiple bounding boxes
-            roomDbHelper.saveCalibratedRoom(
-                userId,
-                "Room 1",
-                37.34393f,   // lat1
-                37.34526f,   // lat2
-                -122.09662f, // lon1
-                -122.09446f  // lon2
-            )
-            roomDbHelper.saveCalibratedRoom(
-                userId,
-                "Room 2",
-                30.355f,   // lat1 (min)
-                38.357f,   // lat2 (max)
-                -124.093f, // lon1 (min, more negative)
-                -40.095f   // lon2 (max, less negative)
-            )
-
-            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
-        }
-    }
+//    private fun maybeInsertMultipleDummyRooms() {
+//        val existingRooms = roomDbHelper.getCalibratedRooms(userId.toString())
+//        if (existingRooms.isEmpty()) {
+//            // Insert multiple bounding boxes
+//            roomDbHelper.saveCalibratedRoom(
+//                userId,
+//                "Room 1",
+//                37.34393f,   // lat1
+//                37.34526f,   // lat2
+//                -122.09662f, // lon1
+//                -122.09446f  // lon2
+//            )
+//            roomDbHelper.saveCalibratedRoom(
+//                userId,
+//                "Room 2",
+//                30.355f,   // lat1 (min)
+//                38.357f,   // lat2 (max)
+//                -124.093f, // lon1 (min, more negative)
+//                -40.095f   // lon2 (max, less negative)
+//            )
+//
+//            Toast.makeText(this, "Inserted multiple dummy rooms for testing!", Toast.LENGTH_SHORT).show()
+//        }
+//    }
 
     override fun onResume() {
         super.onResume()
@@ -252,7 +256,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         val lat = currentLatitude.toFloat()
         val lon = currentLongitude.toFloat()
-        coordinatesText.text = "Coordinates: ($lat, $lon)"
+//        coordinatesText.text = "Coordinates: ($lat, $lon)"
 
         // Check calibrated rooms
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
@@ -269,11 +273,11 @@ class RoomOptionsActivity : AppCompatActivity() {
             }
         }
 
-//        if (matchedRoomName != null) {
-//            actualRoomTextView.text = "Actual Current Room: $matchedRoomName"
-//        } else {
-//            actualRoomTextView.text = "Actual Current Room: No Matched Room"
-//        }
+        if (matchedRoomName != null && matchedRoomName == predictedRoomName) {
+            lightText.text = "ON"
+        } else {
+            lightText.text = "OFF"
+        }
     }
 
     private fun checkLocationAgainstDatabase(
@@ -358,7 +362,7 @@ class RoomOptionsActivity : AppCompatActivity() {
                         runOnUiThread {
                             if (predicted.isNotEmpty()) {
                                 predictedRoomName = predicted
-                                predictedRoomTextView.text = "Predicted Current Room: $predicted"
+                                predictedRoomTextView.text = "Room: $predicted"
                                 openPredictedRoomButton.isEnabled = true
                             } else {
                                 predictedRoomTextView.text = "No prediction received"
