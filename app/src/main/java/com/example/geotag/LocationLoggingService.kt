@@ -29,7 +29,7 @@ class LocationLoggingService : Service(), LocationListener {
     private var currentLongitude: Double = 0.0
 
     // UPDATED server URL
-    private val serverUrl = "http://10.0.2.2:3000/api/log_move"
+    private val serverUrl = "https://fch8e3nlq0.execute-api.ap-south-1.amazonaws.com/update_movements"
 
     override fun onCreate() {
         super.onCreate()

@@ -43,13 +43,16 @@ class RoomOptionsActivity : AppCompatActivity() {
 
     // Countdown to next prediction
     private lateinit var nextPredictionCountdownTextView: TextView
+    private lateinit var suggestedCountdownTextView: TextView
     private var nextPredictionTime: Long = 0L
+    private var nextPredictionTimeRoom: Long = 0L
 
     // Coordinates display
 //    private lateinit var coordinatesText: TextView
 
     // Holds the currently predicted room name
     private var predictedRoomName: String? = null
+    private var currentRoomName: String? = null
 
     // DB helper for fetching calibrated rooms
     private lateinit var roomDbHelper: RoomDatabaseHelper
@@ -68,6 +71,7 @@ class RoomOptionsActivity : AppCompatActivity() {
     private val countdownRunnable = object : Runnable {
         override fun run() {
             updateCountdown()
+            updateCountdownRoom()
             // Update every 1 second
             countdownHandler.postDelayed(this, 1000L)
         }
@@ -111,6 +115,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         predictedRoomTextView = findViewById(R.id.predictedRoomTextView)
         openPredictedRoomButton = findViewById(R.id.openPredictedRoomButton)
         nextPredictionCountdownTextView = findViewById(R.id.nextPredictionCountdownTextView)
+        suggestedCountdownTextView = findViewById(R.id.suggested_light_count_down)
         actualRoomTextView = findViewById(R.id.actualRoomTextView)
         lightText = findViewById(R.id.light_text)
 //        coordinatesText = findViewById(R.id.coordinatesText)
@@ -158,6 +163,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         fetchPredictedRoom()
         // Reset the countdown for another 15 minutes from now
         nextPredictionTime = System.currentTimeMillis() + 15 * 60 * 1000L
+        nextPredictionTimeRoom = System.currentTimeMillis() + 10 * 60 * 1000L
 
         // Request location permission if not granted
         checkLocationPermission()
@@ -261,7 +267,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         // Check calibrated rooms
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
         if (rooms.isEmpty()) {
-            actualRoomTextView.text = "No calibrated rooms found"
+            actualRoomTextView.text = ""
             return
         }
 
@@ -269,6 +275,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         for (room in rooms) {
             if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
                 matchedRoomName = room.roomName
+                currentRoomName = room.roomName
                 break
             }
         }
@@ -399,6 +406,25 @@ class RoomOptionsActivity : AppCompatActivity() {
             fetchPredictedRoom()
             // Reset timer for another 15 minutes
             nextPredictionTime = now + 15 * 60 * 1000L
+        }
+    }
+    private fun updateCountdownRoom() {
+        lightText.text = "ON"
+        val now = System.currentTimeMillis()
+        val diff = nextPredictionTimeRoom - now
+        if (diff > 0) {
+            val seconds = diff / 1000
+            val minutes = seconds / 60
+            val secs = seconds % 60
+            suggestedCountdownTextView.text =
+                "Suggested Action: Turn OFF in ${minutes}m ${secs}s"
+        } else {
+            // Time to fetch a new prediction
+            suggestedCountdownTextView.text = "Turned OFF"
+            lightText.text = "OFF"
+            fetchPredictedRoom()
+            // Reset timer for another 15 minutes
+            if(currentRoomName == predictedRoomName){nextPredictionTimeRoom = now + 10 * 60 * 1000L}
         }
     }
 }
