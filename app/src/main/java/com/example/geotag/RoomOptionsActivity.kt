@@ -22,7 +22,6 @@ import org.json.JSONObject
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-
 class RoomOptionsActivity : AppCompatActivity() {
 
     // User ID from intent
@@ -41,6 +40,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
     // Actual room display (based on GPS vs. calibrated rooms)
     private lateinit var actualRoomTextView: TextView
+    private lateinit var greeting: TextView
 
     // Countdown to next prediction
     private lateinit var nextPredictionCountdownTextView: TextView
@@ -97,6 +97,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             return
         }
 
+
         // Initialize DB + location
         roomDbHelper = RoomDatabaseHelper(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -120,8 +121,9 @@ class RoomOptionsActivity : AppCompatActivity() {
         actualRoomTextView = findViewById(R.id.actualRoomTextView)
         currentRoomTextView = findViewById(R.id.currentRoom)
         lightText = findViewById(R.id.light_text)
+        greeting = findViewById(R.id.tvGreeting)
 //        coordinatesText = findViewById(R.id.coordinatesText)
-//
+        greeting.text = getGreetings()
 // If we already had a predicted room, show it
         if (!predictedRoomName.isNullOrEmpty()) {
             predictedRoomTextView.text = "Predicted Current Room: $predictedRoomName"
@@ -196,6 +198,14 @@ class RoomOptionsActivity : AppCompatActivity() {
 //        }
 //    }
 
+    private fun getGreetings():String{
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return when {
+            hour < 12  -> "Good Morning!"
+            hour in 12..16 -> "Good Afternoon!"
+            else -> "Good Evening!"
+        }
+    }
     override fun onResume() {
         super.onResume()
         // Start updating countdown when the activity is visible
@@ -272,7 +282,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             actualRoomTextView.text = ""
             return
         }
-
+        currentRoomTextView.text = "Current Room not Found!"
         // Determine which room (if any) the current coordinates fall into
         var matchedRoomName: String? = null
         for (room in rooms) {
@@ -419,7 +429,6 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
     private fun updateCountdownRoom() {
-        lightText.text = "ON"
         val now = System.currentTimeMillis()
         val diff = nextPredictionTimeRoom - now
         if (diff > 0) {
