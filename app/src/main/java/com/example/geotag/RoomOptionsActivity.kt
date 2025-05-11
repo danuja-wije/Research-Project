@@ -273,16 +273,21 @@ class RoomOptionsActivity : AppCompatActivity() {
             return
         }
 
+        // Determine which room (if any) the current coordinates fall into
         var matchedRoomName: String? = null
         for (room in rooms) {
             if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
                 matchedRoomName = room.roomName
-                currentRoomName = room.roomName
-                currentRoomTextView.text = room.roomName
                 break
-            }else{
-                currentRoomTextView.text = "Current Room not Found!"
             }
+        }
+        // Update UI based on match result
+        if (matchedRoomName != null) {
+            currentRoomName = matchedRoomName
+            currentRoomTextView.text = matchedRoomName
+        } else {
+            currentRoomName = null
+            currentRoomTextView.text = "Current Room not Found!"
         }
 
         if (matchedRoomName != null && matchedRoomName == predictedRoomName) {
