@@ -20,6 +20,7 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import android.widget.LinearLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
@@ -374,10 +375,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
     /** Pull custom name from the matching EditText */
     private fun getUserEnteredRoomName(roomName: String): String {
         for (i in 0 until roomsContainer.childCount) {
-            val layout = roomsContainer.getChildAt(i) as LinearLayout
-            val label  = layout.getChildAt(0) as TextView
+            val card = roomsContainer.getChildAt(i) as CardView
+            val innerLayout = card.getChildAt(0) as LinearLayout
+            val label  = innerLayout.getChildAt(0) as TextView
             if (label.text == roomName) {
-                val et = layout.getChildAt(2) as EditText
+                val et = innerLayout.getChildAt(2) as EditText
                 return et.text.toString().trim()
             }
         }
@@ -387,12 +389,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
     /** Once calibrated, offer a “Setup Room” button below */
     private fun addSetupRoomButton(roomName: String) {
         for (i in 0 until roomsContainer.childCount) {
-            val layout = roomsContainer.getChildAt(i) as LinearLayout
-            val label  = layout.getChildAt(0) as TextView
+            val card = roomsContainer.getChildAt(i) as CardView
+            val innerLayout = card.getChildAt(0) as LinearLayout
+            val label       = innerLayout.getChildAt(0) as TextView
             if (label.text == roomName) {
                 // prevent duplicates
-                for (j in 0 until layout.childCount) {
-                    val child = layout.getChildAt(j)
+                for (j in 0 until innerLayout.childCount) {
+                    val child = innerLayout.getChildAt(j)
                     if (child is Button && child.text == "Setup Room") return
                 }
                 val btn = Button(this).apply {
@@ -409,16 +412,21 @@ class MainActivity : AppCompatActivity(), LocationListener {
                         })
                     }
                 }
-                layout.addView(btn)
+                innerLayout.addView(btn)
             }
         }
     }
 
     private fun hideAllButtons() {
         for (i in 0 until roomsContainer.childCount) {
-            val layout   = roomsContainer.getChildAt(i) as LinearLayout
-            val startBtn = layout.getChildAt(3) as Button
-            val stopBtn  = layout.getChildAt(4) as Button
+            // Unwrap CardView
+            val card = roomsContainer.getChildAt(i) as CardView
+            val innerLayout = card.getChildAt(0) as LinearLayout
+            // Button row is at index 3
+            val buttonRow = innerLayout.getChildAt(3) as LinearLayout
+            // Start and Stop buttons at index 0 and 1
+            val startBtn = buttonRow.getChildAt(0)
+            val stopBtn  = buttonRow.getChildAt(1)
             startBtn.visibility = View.GONE
             stopBtn.visibility  = View.GONE
         }
@@ -429,11 +437,18 @@ class MainActivity : AppCompatActivity(), LocationListener {
         inProgress: Boolean
     ) {
         for (i in 0 until roomsContainer.childCount) {
-            val layout = roomsContainer.getChildAt(i) as LinearLayout
-            val label  = layout.getChildAt(0) as TextView
-            if (label.text == roomName) {
-                val startBtn = layout.getChildAt(3) as Button
-                val stopBtn  = layout.getChildAt(4) as Button
+            // Each child is a CardView containing our inner layout
+            val card = roomsContainer.getChildAt(i) as CardView
+            // The CardView's first child is the LinearLayout we built
+            val innerLayout = card.getChildAt(0) as LinearLayout
+            // The first view in innerLayout is the title TextView
+            val titleView = innerLayout.getChildAt(0) as TextView
+            if (titleView.text == roomName) {
+                // The fourth child is the button row (LinearLayout)
+                val buttonRow = innerLayout.getChildAt(3) as LinearLayout
+                // ButtonRow contains Start at index 0 and Stop at index 1
+                val startBtn = buttonRow.getChildAt(0) as MaterialButton
+                val stopBtn  = buttonRow.getChildAt(1) as MaterialButton
                 startBtn.isEnabled = !inProgress
                 stopBtn.isEnabled  = inProgress
             }

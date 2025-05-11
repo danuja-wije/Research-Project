@@ -34,6 +34,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
     // Predicted room display + button
     private lateinit var predictedRoomTextView: TextView
+    private lateinit var currentRoomTextView: TextView
     private lateinit var lightText: TextView
 
     private lateinit var openPredictedRoomButton: Button
@@ -117,6 +118,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         nextPredictionCountdownTextView = findViewById(R.id.nextPredictionCountdownTextView)
         suggestedCountdownTextView = findViewById(R.id.suggested_light_count_down)
         actualRoomTextView = findViewById(R.id.actualRoomTextView)
+        currentRoomTextView = findViewById(R.id.currentRoom)
         lightText = findViewById(R.id.light_text)
 //        coordinatesText = findViewById(R.id.coordinatesText)
 //
@@ -276,6 +278,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
                 matchedRoomName = room.roomName
                 currentRoomName = room.roomName
+                currentRoomTextView.text = room.roomName
                 break
             }
         }
