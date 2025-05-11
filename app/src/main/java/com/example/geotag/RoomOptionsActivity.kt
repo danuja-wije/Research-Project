@@ -280,6 +280,8 @@ class RoomOptionsActivity : AppCompatActivity() {
                 currentRoomName = room.roomName
                 currentRoomTextView.text = room.roomName
                 break
+            }else{
+                currentRoomTextView.text = "Current Room not Found!"
             }
         }
 
