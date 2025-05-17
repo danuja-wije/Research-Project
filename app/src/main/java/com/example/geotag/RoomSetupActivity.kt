@@ -206,7 +206,7 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
 
                 // Trigger API request based on toggle state
                 val action = if (on) "ON" else "OFF"
-                val roomName = "Room1" // Update this if dynamic room names are needed
+                val roomName = "Room1" // The current room will be set when we go with production. For demonstration purposes, the room is set for Room1 IoT device
 
                 val jsonBody = """
                     {
@@ -263,7 +263,7 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
         brightnessSeekBars[index] = seek
 
         container.addView(row)
-        container.addView(seek)
+        //container.addView(seek)
         card.addView(container)
         lightsContainer.addView(card)
     }
