@@ -300,11 +300,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             currentRoomTextView.text = "Current Room not Found!"
         }
 
-        if (matchedRoomName != null && matchedRoomName == predictedRoomName) {
-            lightText.text = "ON"
-        } else {
-            lightText.text = "OFF"
-        }
+
     }
 
     private fun checkLocationAgainstDatabase(
@@ -333,7 +329,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         val jsonBody = JSONObject().apply {
             put("timestamp", timestamp)
-            put("user_id", "User$userId")
+            put("user_id", "User1")
         }
 
         val requestBody = RequestBody.create(
@@ -389,6 +385,7 @@ class RoomOptionsActivity : AppCompatActivity() {
                         runOnUiThread {
                             if (predicted.isNotEmpty()) {
                                 predictedRoomName = predicted
+                                lightText.text = "ON"
                                 predictedRoomTextView.text = "Room: $predicted"
                                 openPredictedRoomButton.isEnabled = true
                             } else {
@@ -440,7 +437,11 @@ class RoomOptionsActivity : AppCompatActivity() {
         } else {
             // Time to fetch a new prediction
             suggestedCountdownTextView.text = "Turned OFF"
-            lightText.text = "OFF"
+            if (currentRoomName == predictedRoomName) {
+                lightText.text = "ON"
+            } else {
+                lightText.text = "OFF"
+            }
             fetchPredictedRoom()
             // Reset timer for another 15 minutes
             if(currentRoomName == predictedRoomName){nextPredictionTimeRoom = now + 10 * 60 * 1000L}

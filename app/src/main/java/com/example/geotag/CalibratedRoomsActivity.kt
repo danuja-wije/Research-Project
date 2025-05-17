@@ -104,7 +104,7 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 text = if (room.minLat == 0f && room.maxLat == 0f) {
                     "Range: not calibrated"
                 } else {
-                    "Range: (${room.minLat}, ${room.maxLat})"
+                    "Range: (${room.minLat}, ${room.minLon})  (${room.maxLat}, ${room.maxLon})"
                 }
 
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)

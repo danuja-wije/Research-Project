@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         roomsContainer.removeAllViews()
 
         for (i in 1..count) {
-            val roomName = "Room $i"
+            val roomName = "Room$i"
 
             // Card params with bottom margin
             val cardParams = LinearLayout.LayoutParams(
