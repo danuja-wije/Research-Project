@@ -322,11 +322,46 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun fetchPredictedRoom() {
+        lightText.text = "ON"
+
+        // Trigger API request based on status
+        val action = "ON"
+        val roomName = "Room1" // The current room will be set when we go with production. For demonstration purposes, the room is set for Room1 IoT device
+
+        val jsonBody1 = """
+                    {
+                        "room": "$roomName",
+                        "action": "$action"
+                    }
+                """.trimIndent()
+
+        val url = "https://fch8e3nlq0.execute-api.ap-south-1.amazonaws.com/MQTT_control"
+
+        Thread {
+            try {
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.doOutput = true
+                connection.outputStream.use { os ->
+                    os.write(jsonBody1.toByteArray(Charsets.UTF_8))
+                }
+
+                val responseCode = connection.responseCode
+                val responseMessage = connection.inputStream.bufferedReader().use { it.readText() }
+
+                println("API Response code: $responseCode")
+                println("API Response message: $responseMessage")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }.start()
+
         // Generate a safe ISO-8601 timestamp
         val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
         dateFormat.timeZone = TimeZone.getTimeZone("UTC")
         val timestamp = dateFormat.format(Date())
-
+        Toast.makeText(this, "predicted date format $dateFormat", Toast.LENGTH_SHORT).show()
         val jsonBody = JSONObject().apply {
             put("timestamp", timestamp)
             put("user_id", "User1")
@@ -385,7 +420,6 @@ class RoomOptionsActivity : AppCompatActivity() {
                         runOnUiThread {
                             if (predicted.isNotEmpty()) {
                                 predictedRoomName = predicted
-                                lightText.text = "ON"
                                 predictedRoomTextView.text = "Room: $predicted"
                                 openPredictedRoomButton.isEnabled = true
                             } else {
@@ -421,6 +455,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             // Time to fetch a new prediction
             nextPredictionCountdownTextView.text = "Next prediction is due now"
             fetchPredictedRoom()
+
             // Reset timer for another 15 minutes
             nextPredictionTime = now + 15 * 60 * 1000L
         }
@@ -439,12 +474,75 @@ class RoomOptionsActivity : AppCompatActivity() {
             suggestedCountdownTextView.text = "Turned OFF"
             if (currentRoomName == predictedRoomName) {
                 lightText.text = "ON"
+                // Trigger API request based on status
+                val action = "ON"
+                val roomName = "Room1" // The current room will be set when we go with production. For demonstration purposes, the room is set for Room1 IoT device
+
+                val jsonBody1 = """
+                    {
+                        "room": "$roomName",
+                        "action": "$action"
+                    }
+                """.trimIndent()
+
+                val url = "https://fch8e3nlq0.execute-api.ap-south-1.amazonaws.com/MQTT_control"
+
+                Thread {
+                    try {
+                        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        connection.doOutput = true
+                        connection.outputStream.use { os ->
+                            os.write(jsonBody1.toByteArray(Charsets.UTF_8))
+                        }
+
+                        val responseCode = connection.responseCode
+                        val responseMessage = connection.inputStream.bufferedReader().use { it.readText() }
+
+                        println("API Response code: $responseCode")
+                        println("API Response message: $responseMessage")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }.start()
             } else {
                 lightText.text = "OFF"
+                // Trigger API request based on status
+                val action = "OFF"
+                val roomName = "Room1" // The current room will be set when we go with production. For demonstration purposes, the room is set for Room1 IoT device
+
+                val jsonBody1 = """
+                    {
+                        "room": "$roomName",
+                        "action": "$action"
+                    }
+                """.trimIndent()
+
+                val url = "https://fch8e3nlq0.execute-api.ap-south-1.amazonaws.com/MQTT_control"
+
+                Thread {
+                    try {
+                        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        connection.doOutput = true
+                        connection.outputStream.use { os ->
+                            os.write(jsonBody1.toByteArray(Charsets.UTF_8))
+                        }
+
+                        val responseCode = connection.responseCode
+                        val responseMessage = connection.inputStream.bufferedReader().use { it.readText() }
+
+                        println("API Response code: $responseCode")
+                        println("API Response message: $responseMessage")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }.start()
             }
-            fetchPredictedRoom()
-            // Reset timer for another 15 minutes
-            if(currentRoomName == predictedRoomName){nextPredictionTimeRoom = now + 10 * 60 * 1000L}
+            // Reset timer for another 10 minutes
+            nextPredictionTimeRoom = now + 10 * 60 * 1000L
         }
     }
 }
