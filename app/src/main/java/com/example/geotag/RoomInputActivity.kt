@@ -30,7 +30,7 @@ class RoomInputActivity : AppCompatActivity() {
         submitRoomCountButton.setOnClickListener {
             val roomCount = roomCountInput.text.toString().toIntOrNull()
 
-            if (roomCount != null && roomCount > 0) {
+            if (roomCount != null && roomCount > 0 && roomCount <9) {
                 // Pass the room count to MainActivity
 
                 val intent = Intent(this, MainActivity::class.java)

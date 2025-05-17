@@ -203,6 +203,39 @@ class RoomSetupActivity : AppCompatActivity(), SensorEventListener {
             setOnCheckedChangeListener { _, on ->
                 light.manualControl = on
                 brightnessSeekBars[index]?.isEnabled = on
+
+                // Trigger API request based on toggle state
+                val action = if (on) "ON" else "OFF"
+                val roomName = "Room1" // Update this if dynamic room names are needed
+
+                val jsonBody = """
+                    {
+                        "room": "$roomName",
+                        "action": "$action"
+                    }
+                """.trimIndent()
+
+                val url = "https://fch8e3nlq0.execute-api.ap-south-1.amazonaws.com/MQTT_control"
+
+                Thread {
+                    try {
+                        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        connection.doOutput = true
+                        connection.outputStream.use { os ->
+                            os.write(jsonBody.toByteArray(Charsets.UTF_8))
+                        }
+
+                        val responseCode = connection.responseCode
+                        val responseMessage = connection.inputStream.bufferedReader().use { it.readText() }
+
+                        println("API Response code: $responseCode")
+                        println("API Response message: $responseMessage")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }.start()
             }
         }
 
