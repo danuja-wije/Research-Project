@@ -357,10 +357,11 @@ class RoomOptionsActivity : AppCompatActivity() {
             }
         }.start()
 
-        // Generate a safe ISO-8601 timestamp with milliseconds in UTC
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        // Generate an ISO-8601 UTC timestamp with milliseconds and 'Z' suffix
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
         dateFormat.timeZone = TimeZone.getTimeZone("UTC")
         val timestamp = dateFormat.format(Date())
+        Toast.makeText(this, "Time stamp : $timestamp", Toast.LENGTH_SHORT).show()
         val jsonBody = JSONObject().apply {
             put("timestamp", timestamp)
             put("user_id", "User1")
