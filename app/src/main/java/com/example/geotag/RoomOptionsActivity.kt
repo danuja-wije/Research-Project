@@ -310,15 +310,51 @@ class RoomOptionsActivity : AppCompatActivity() {
     ): Boolean {
         val boundaries = roomDbHelper.getRoomBoundaries(roomName)
         if (boundaries != null) {
-            val (boundary1, boundary2) = boundaries
-            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
-            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
-            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
-            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
-
-            return currentLat in minLat..maxLat && currentLon in minLon..maxLon
+            return isWithinRoomBoundary(currentLat, currentLon, boundaries)
         }
         return false
+    }
+
+    /**
+     * Check if the given current coordinates lie within the calibrated room boundary,
+     * using a circular geofence (center + radius) and a small margin for GPS noise.
+     */
+    private fun isWithinRoomBoundary(
+        currentLat: Double,
+        currentLon: Double,
+        boundary: Pair<Pair<Float, Float>, Pair<Float, Float>>
+    ): Boolean {
+        val (minPair, maxPair) = boundary
+        val minLat = minPair.first
+        val minLon = minPair.second
+        val maxLat = maxPair.first
+        val maxLon = maxPair.second
+
+        // Compute center point
+        val centerLat = (minLat + maxLat) / 2.0
+        val centerLon = (minLon + maxLon) / 2.0
+
+        // Radius to farthest corner
+        val cornerResult = FloatArray(1)
+        Location.distanceBetween(
+            centerLat, centerLon,
+            maxLat.toDouble(), maxLon.toDouble(),
+            cornerResult
+        )
+        val maxRadius = cornerResult[0]
+
+        // Distance from center to current location
+        val currentResult = FloatArray(1)
+        Location.distanceBetween(
+            centerLat, centerLon,
+            currentLat, currentLon,
+            currentResult
+        )
+        val currentDistance = currentResult[0]
+
+        // Add margin for GPS inaccuracy
+        val marginMeters = 5f
+        return currentDistance <= (maxRadius + marginMeters)
     }
 
     private fun fetchPredictedRoom() {
