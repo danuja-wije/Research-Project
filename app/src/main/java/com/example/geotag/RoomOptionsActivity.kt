@@ -363,7 +363,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         val maxLon = max(rawLon1, rawLon2)
 
         // Add margin for GPS inaccuracy (in meters)
-        val marginMeters = 5f
+        val marginMeters = 1f
         val latMargin = marginMeters / 111000f
         val lonMargin = marginMeters / (111000f * Math.cos(Math.toRadians(currentLat))).toFloat()
 
