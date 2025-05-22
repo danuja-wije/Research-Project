@@ -60,7 +60,7 @@ class CalibratedRoomsActivity : AppCompatActivity() {
     }
 
     private fun displayRooms(
-        rooms: List<RoomDatabaseHelper.Room>,
+        rooms: List<RoomDatabaseHelper.RoomEntry>,
         userId: Int
     ) {
         roomsContainer.removeAllViews()
@@ -99,24 +99,18 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 )
             }
 
-            // 4) Subtitle: Range
+            // 4) Subtitle: Corners
+            val corners = roomDbHelper.getRoomCorners(room.roomName)
             val tvRange = TextView(this).apply {
-                text = if (room.minLat == 0f && room.maxLat == 0f) {
-                    "Range: not calibrated"
-                } else {
-                    "Range: (${room.minLat}, ${room.minLon})  (${room.maxLat}, ${room.maxLon})"
-                }
-
+                text = corners?.joinToString(prefix = "Corners: ", separator = " | ") {
+                    "(${it.first}, ${it.second})"
+                } ?: "Corners: not calibrated"
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setTextColor(
-                    ContextCompat.getColor(context, R.color.grayLight)
-                )
-                val params = LinearLayout.LayoutParams(
+                setTextColor(ContextCompat.getColor(context, R.color.grayLight))
+                layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                params.topMargin = 4.toPx()
-                layoutParams = params
+                ).also { it.topMargin = 4.toPx() }
             }
 
             // 5) Custom name input

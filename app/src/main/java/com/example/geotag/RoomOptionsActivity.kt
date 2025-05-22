@@ -2,7 +2,6 @@ package com.example.geotag
 
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -71,12 +70,13 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var currentLatitude = 0.0
     private var currentLongitude = 0.0
 
-    // For smoothing and dwell-time detection
+    // Smoothing + dwell-time
     private val locationBuffer = ArrayDeque<Pair<Double, Double>>()
     private val bufferSize = 5
     private val dwellTimeMillis = 3000L
-    private var lastMatchStart = 0L
     private var lastDetectedRoom: String? = null
+    private var lastMatchStart = 0L
+
 
     // Handler + runnable to update countdown every second
     private val countdownHandler = Handler(Looper.getMainLooper())
@@ -113,8 +113,6 @@ class RoomOptionsActivity : AppCompatActivity() {
         // Initialize DB + location
         roomDbHelper = RoomDatabaseHelper(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        // Geofencing removed
 
         // Initialize locationCallback
         locationCallback = object : LocationCallback() {
@@ -282,97 +280,74 @@ class RoomOptionsActivity : AppCompatActivity() {
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
-    @SuppressLint("MissingPermission")
     private fun updateLocation(location: Location) {
-        // Discard low-accuracy fixes
         if (location.accuracy > 10f) return
-        // Add to rolling buffer
-        val lat = location.latitude
-        val lon = location.longitude
-        locationBuffer.addLast(lat to lon)
+        // buffer & smooth
+        locationBuffer.addLast(location.latitude to location.longitude)
         if (locationBuffer.size > bufferSize) locationBuffer.removeFirst()
         if (locationBuffer.size < bufferSize) return
 
-        // Compute smoothed average
         val avgLat = locationBuffer.map { it.first }.average()
         val avgLon = locationBuffer.map { it.second }.average()
 
-        // Check against calibrated rooms
-        val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
-        val matched = rooms.firstOrNull { room ->
-            checkLocationAgainstDatabase(room.roomName, avgLat, avgLon)
-        }?.roomName
+        // test each room's 4 corners
+        val match = roomDbHelper.getCalibratedRooms(userId.toString())
+            .mapNotNull { rc ->
+                roomDbHelper.getRoomCorners(rc.roomName)?.let { rc.roomName to it }
+            }
+            .firstOrNull { (_, corners) ->
+                isPointInPolygon(avgLat, avgLon, corners)
+            }?.first
 
         val now = System.currentTimeMillis()
-        if (matched != null) {
-            if (matched == lastDetectedRoom) {
-                // if same room continues, check dwell time
+        when {
+            match == null -> {
+                lastDetectedRoom = null
+                lastMatchStart = 0L
+                runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
+            }
+            match == lastDetectedRoom -> {
                 if (lastMatchStart == 0L) lastMatchStart = now
                 else if (now - lastMatchStart >= dwellTimeMillis) {
-                    currentRoomName = matched
-                    runOnUiThread { currentRoomTextView.text = matched }
+                    runOnUiThread { currentRoomTextView.text = match }
                 }
-            } else {
-                // new candidate room
-                lastDetectedRoom = matched
-                lastMatchStart = now
             }
-        } else {
-            // no room match
-            lastMatchStart = 0L
-            lastDetectedRoom = null
-            if (currentRoomName != null) {
-                currentRoomName = null
-                runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
+            else -> {
+                lastDetectedRoom = match
+                lastMatchStart = now
             }
         }
     }
+    /** Ray-casting point-in-polygon */
+    private fun isPointInPolygon(
+        lat: Double, lon: Double,
+        corners: List<Pair<Float, Float>>
+    ): Boolean {
+        var inside = false
+        val n = corners.size
+        for (i in 0 until n) {
+            val (y1, x1) = corners[i]
+            val (y2, x2) = corners[(i + 1) % n]
+            if (((y1 > lat) != (y2 > lat)) &&
+                (lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1)
+            ) inside = !inside
+        }
+        return inside
+    }
 
+    /**
+     * Check if the given current coordinates lie within the calibrated room boundary
+     * defined by four corners.
+     */
     private fun checkLocationAgainstDatabase(
         roomName: String,
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        val boundaries = roomDbHelper.getRoomBoundaries(roomName)
-        if (boundaries != null) {
-            return isWithinRoomBoundary(currentLat, currentLon, boundaries)
-        }
-        return false
+        val corners = roomDbHelper.getRoomCorners(roomName)
+        return corners?.let { isPointInPolygon(currentLat, currentLon, it) } ?: false
     }
 
-    /**
-     * Check if the given current coordinates lie within the calibrated room boundary,
-     * using a rectangular bounding box and a small margin for GPS noise.
-     */
-    private fun isWithinRoomBoundary(
-        currentLat: Double,
-        currentLon: Double,
-        boundary: Pair<Pair<Float, Float>, Pair<Float, Float>>
-    ): Boolean {
-        // Extract raw values
-        val (latPair, lonPair) = boundary
-        val rawLat1 = latPair.first
-        val rawLat2 = latPair.second
-        val rawLon1 = lonPair.first
-        val rawLon2 = lonPair.second
-
-        // Ensure correct ordering
-        val minLat = min(rawLat1, rawLat2)
-        val maxLat = max(rawLat1, rawLat2)
-        val minLon = min(rawLon1, rawLon2)
-        val maxLon = max(rawLon1, rawLon2)
-
-        // Add margin for GPS inaccuracy (in meters)
-        val marginMeters = 1f
-        val latMargin = marginMeters / 111000f
-        val lonMargin = marginMeters / (111000f * Math.cos(Math.toRadians(currentLat))).toFloat()
-
-        // Check if current coordinates fall within expanded rectangle
-        return currentLat >= (minLat - latMargin) &&
-               currentLat <= (maxLat + latMargin) &&
-               currentLon >= (minLon - lonMargin) &&
-               currentLon <= (maxLon + lonMargin)
-    }
 
     private fun fetchPredictedRoom() {
         lightText.text = "ON"
@@ -598,7 +573,6 @@ class RoomOptionsActivity : AppCompatActivity() {
             nextPredictionTimeRoom = now + 10 * 60 * 1000L
         }
     }
-    // Geofencing receiver removed; nothing to unregister
     override fun onDestroy() {
         super.onDestroy()
     }

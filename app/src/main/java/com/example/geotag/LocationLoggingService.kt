@@ -111,22 +111,40 @@ class LocationLoggingService : Service(), LocationListener {
         }
     }
 
+    /**
+     * Check if the current coordinates lie within the calibrated room polygon.
+     */
     private fun checkLocationAgainstDatabase(
         roomName: String,
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        val boundaries = roomDbHelper.getRoomBoundaries(roomName)
-        if (boundaries != null) {
-            val (boundary1, boundary2) = boundaries
-            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
-            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
-            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
-            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
+        // Fetch the four corners for this room
+        val corners = roomDbHelper.getRoomCorners(roomName) ?: return false
+        // Use ray-casting algorithm to test point-in-polygon
+        return isPointInPolygon(currentLat, currentLon, corners)
+    }
 
-            return currentLat in minLat..maxLat && currentLon in minLon..maxLon
+    /**
+     * Ray-casting algorithm: returns true if (lat, lon) is inside the polygon defined by list of corners.
+     */
+    private fun isPointInPolygon(
+        lat: Double,
+        lon: Double,
+        corners: List<Pair<Float, Float>>
+    ): Boolean {
+        var inside = false
+        val n = corners.size
+        for (i in 0 until n) {
+            val (y1, x1) = corners[i]
+            val (y2, x2) = corners[(i + 1) % n]
+            if (((y1 > lat) != (y2 > lat)) &&
+                (lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1)
+            ) {
+                inside = !inside
+            }
         }
-        return false
+        return inside
     }
 
     override fun onProviderEnabled(provider: String) {}
