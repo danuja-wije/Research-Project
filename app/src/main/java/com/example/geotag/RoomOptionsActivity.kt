@@ -306,15 +306,15 @@ class RoomOptionsActivity : AppCompatActivity() {
                 lastMatchStart = 0L
                 runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
             }
-            match == lastDetectedRoom -> {
-                if (lastMatchStart == 0L) lastMatchStart = now
-                else if (now - lastMatchStart >= dwellTimeMillis) {
-                    runOnUiThread { currentRoomTextView.text = match }
-                }
-            }
-            else -> {
+            match != lastDetectedRoom -> {
+                // New room detected: reset dwell timer and update UI immediately
                 lastDetectedRoom = match
                 lastMatchStart = now
+                runOnUiThread { currentRoomTextView.text = match }
+            }
+            now - lastMatchStart >= dwellTimeMillis -> {
+                // Sustained in same room beyond dwell time: confirm
+                runOnUiThread { currentRoomTextView.text = match }
             }
         }
     }
@@ -334,6 +334,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
         return inside
     }
+
 
     /**
      * Check if the given current coordinates lie within the calibrated room boundary
