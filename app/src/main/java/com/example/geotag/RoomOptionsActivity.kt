@@ -1,15 +1,8 @@
 package com.example.geotag
 
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.GeofencingEvent
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.IntentFilter
 import android.content.Intent
+import android.content.IntentFilter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -78,31 +71,12 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var currentLatitude = 0.0
     private var currentLongitude = 0.0
 
-    // Geofencing
-    private lateinit var geofencingClient: GeofencingClient
-    private val geofenceList = mutableListOf<Geofence>()
-    private val geofenceIntentAction = "com.example.geotag.GEOFENCE_TRANSITION"
-    private val geofenceReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val geofencingEvent = GeofencingEvent.fromIntent(intent) ?: return
-            if (geofencingEvent.hasError()) return
-            val transition = geofencingEvent.geofenceTransition
-            val ids = geofencingEvent.triggeringGeofences?.map { it.requestId } ?: return
-            if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {
-                ids.firstOrNull()?.let { room ->
-                    currentRoomName = room
-                    runOnUiThread { currentRoomTextView.text = room }
-                }
-            } else if (transition == Geofence.GEOFENCE_TRANSITION_EXIT) {
-                ids.firstOrNull()?.let { room ->
-                    if (currentRoomName == room) {
-                        currentRoomName = null
-                        runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
-                    }
-                }
-            }
-        }
-    }
+    // For smoothing and dwell-time detection
+    private val locationBuffer = ArrayDeque<Pair<Double, Double>>()
+    private val bufferSize = 5
+    private val dwellTimeMillis = 3000L
+    private var lastMatchStart = 0L
+    private var lastDetectedRoom: String? = null
 
     // Handler + runnable to update countdown every second
     private val countdownHandler = Handler(Looper.getMainLooper())
@@ -140,9 +114,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         roomDbHelper = RoomDatabaseHelper(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-        geofencingClient = LocationServices.getGeofencingClient(this)
-        registerReceiver(geofenceReceiver, IntentFilter(geofenceIntentAction))
-        registerGeofences()
+        // Geofencing removed
 
         // Initialize locationCallback
         locationCallback = object : LocationCallback() {
@@ -213,49 +185,6 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         // Request location permission if not granted
         checkLocationPermission()
-    }
-    private fun registerGeofences() {
-        // Build geofences from calibrated rooms
-        roomDbHelper.getCalibratedRooms(userId.toString()).forEach { room ->
-            val bounds = roomDbHelper.getRoomBoundaries(room.roomName) ?: return@forEach
-            val (latPair, lonPair) = bounds
-            val centerLat = (latPair.first + latPair.second) / 2.0
-            val centerLon = (lonPair.first + lonPair.second) / 2.0
-            // radius = half of diagonal
-            val cornerDist = FloatArray(1)
-            Location.distanceBetween(
-                centerLat, centerLon,
-                latPair.first.toDouble(), lonPair.first.toDouble(),
-                cornerDist
-            )
-            geofenceList.add(
-                Geofence.Builder()
-                    .setRequestId(room.roomName)
-                    .setCircularRegion(centerLat, centerLon, cornerDist[0] + 5f)
-                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
-                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
-                    .build()
-            )
-        }
-        if (geofenceList.isNotEmpty()) {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                checkLocationPermission()
-            } else {
-                geofencingClient.addGeofences(
-                    GeofencingRequest.Builder()
-                        .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-                        .addGeofences(geofenceList)
-                        .build(),
-                    PendingIntent.getBroadcast(
-                        this,
-                        0,
-                        Intent(geofenceIntentAction),
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                    )
-                )
-            }
-        }
     }
 
 //    private fun maybeInsertMultipleDummyRooms() {
@@ -353,38 +282,49 @@ class RoomOptionsActivity : AppCompatActivity() {
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
+    @SuppressLint("MissingPermission")
     private fun updateLocation(location: Location) {
-        // Filter out low-accuracy fixes
+        // Discard low-accuracy fixes
         if (location.accuracy > 10f) return
-        currentLatitude = location.latitude
-        currentLongitude = location.longitude
+        // Add to rolling buffer
+        val lat = location.latitude
+        val lon = location.longitude
+        locationBuffer.addLast(lat to lon)
+        if (locationBuffer.size > bufferSize) locationBuffer.removeFirst()
+        if (locationBuffer.size < bufferSize) return
 
-        val lat = currentLatitude.toFloat()
-        val lon = currentLongitude.toFloat()
-//        coordinatesText.text = "Coordinates: ($lat, $lon)"
+        // Compute smoothed average
+        val avgLat = locationBuffer.map { it.first }.average()
+        val avgLon = locationBuffer.map { it.second }.average()
 
-        // Check calibrated rooms
+        // Check against calibrated rooms
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
-        if (rooms.isEmpty()) {
-            actualRoomTextView.text = ""
-            return
-        }
-        currentRoomTextView.text = "Current Room not Found!"
-        // Determine which room (if any) the current coordinates fall into
-        var matchedRoomName: String? = null
-        for (room in rooms) {
-            if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
-                matchedRoomName = room.roomName
-                break
+        val matched = rooms.firstOrNull { room ->
+            checkLocationAgainstDatabase(room.roomName, avgLat, avgLon)
+        }?.roomName
+
+        val now = System.currentTimeMillis()
+        if (matched != null) {
+            if (matched == lastDetectedRoom) {
+                // if same room continues, check dwell time
+                if (lastMatchStart == 0L) lastMatchStart = now
+                else if (now - lastMatchStart >= dwellTimeMillis) {
+                    currentRoomName = matched
+                    runOnUiThread { currentRoomTextView.text = matched }
+                }
+            } else {
+                // new candidate room
+                lastDetectedRoom = matched
+                lastMatchStart = now
             }
-        }
-        // Update UI based on match result
-        if (matchedRoomName != null) {
-            currentRoomName = matchedRoomName
-            currentRoomTextView.text = matchedRoomName
         } else {
-            currentRoomName = null
-            currentRoomTextView.text = "Current Room not Found!"
+            // no room match
+            lastMatchStart = 0L
+            lastDetectedRoom = null
+            if (currentRoomName != null) {
+                currentRoomName = null
+                runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
+            }
         }
     }
 
@@ -658,8 +598,8 @@ class RoomOptionsActivity : AppCompatActivity() {
             nextPredictionTimeRoom = now + 10 * 60 * 1000L
         }
     }
+    // Geofencing receiver removed; nothing to unregister
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(geofenceReceiver)
     }
 }
