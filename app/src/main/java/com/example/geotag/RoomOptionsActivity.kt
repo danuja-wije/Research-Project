@@ -317,7 +317,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
     /**
      * Check if the given current coordinates lie within the calibrated room boundary,
-     * using a circular geofence (center + radius) and a small margin for GPS noise.
+     * using a rectangular bounding box and a small margin for GPS noise.
      */
     private fun isWithinRoomBoundary(
         currentLat: Double,
@@ -330,31 +330,18 @@ class RoomOptionsActivity : AppCompatActivity() {
         val maxLat = maxPair.first
         val maxLon = maxPair.second
 
-        // Compute center point
-        val centerLat = (minLat + maxLat) / 2.0
-        val centerLon = (minLon + maxLon) / 2.0
-
-        // Radius to farthest corner
-        val cornerResult = FloatArray(1)
-        Location.distanceBetween(
-            centerLat, centerLon,
-            maxLat.toDouble(), maxLon.toDouble(),
-            cornerResult
-        )
-        val maxRadius = cornerResult[0]
-
-        // Distance from center to current location
-        val currentResult = FloatArray(1)
-        Location.distanceBetween(
-            centerLat, centerLon,
-            currentLat, currentLon,
-            currentResult
-        )
-        val currentDistance = currentResult[0]
-
         // Add margin for GPS inaccuracy
         val marginMeters = 5f
-        return currentDistance <= (maxRadius + marginMeters)
+
+        // Convert margin in meters to approximate degrees (latitude/longitude)
+        val latMargin = marginMeters / 111000f
+        val lonMargin = marginMeters / (111000f * Math.cos(Math.toRadians(currentLat))).toFloat()
+
+        // Check if current coordinates fall within expanded rectangle
+        return currentLat >= (minLat - latMargin) &&
+               currentLat <= (maxLat + latMargin) &&
+               currentLon >= (minLon - lonMargin) &&
+               currentLon <= (maxLon + lonMargin)
     }
 
     private fun fetchPredictedRoom() {
