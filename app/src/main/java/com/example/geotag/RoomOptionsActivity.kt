@@ -1,8 +1,17 @@
 package com.example.geotag
 
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.GeofencingEvent
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.content.Intent
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import kotlin.math.min
@@ -69,6 +78,32 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var currentLatitude = 0.0
     private var currentLongitude = 0.0
 
+    // Geofencing
+    private lateinit var geofencingClient: GeofencingClient
+    private val geofenceList = mutableListOf<Geofence>()
+    private val geofenceIntentAction = "com.example.geotag.GEOFENCE_TRANSITION"
+    private val geofenceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val geofencingEvent = GeofencingEvent.fromIntent(intent) ?: return
+            if (geofencingEvent.hasError()) return
+            val transition = geofencingEvent.geofenceTransition
+            val ids = geofencingEvent.triggeringGeofences?.map { it.requestId } ?: return
+            if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {
+                ids.firstOrNull()?.let { room ->
+                    currentRoomName = room
+                    runOnUiThread { currentRoomTextView.text = room }
+                }
+            } else if (transition == Geofence.GEOFENCE_TRANSITION_EXIT) {
+                ids.firstOrNull()?.let { room ->
+                    if (currentRoomName == room) {
+                        currentRoomName = null
+                        runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
+                    }
+                }
+            }
+        }
+    }
+
     // Handler + runnable to update countdown every second
     private val countdownHandler = Handler(Looper.getMainLooper())
     private val countdownRunnable = object : Runnable {
@@ -80,6 +115,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_room_options)
@@ -103,6 +139,10 @@ class RoomOptionsActivity : AppCompatActivity() {
         // Initialize DB + location
         roomDbHelper = RoomDatabaseHelper(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        geofencingClient = LocationServices.getGeofencingClient(this)
+        registerReceiver(geofenceReceiver, IntentFilter(geofenceIntentAction))
+        registerGeofences()
 
         // Initialize locationCallback
         locationCallback = object : LocationCallback() {
@@ -173,6 +213,49 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         // Request location permission if not granted
         checkLocationPermission()
+    }
+    private fun registerGeofences() {
+        // Build geofences from calibrated rooms
+        roomDbHelper.getCalibratedRooms(userId.toString()).forEach { room ->
+            val bounds = roomDbHelper.getRoomBoundaries(room.roomName) ?: return@forEach
+            val (latPair, lonPair) = bounds
+            val centerLat = (latPair.first + latPair.second) / 2.0
+            val centerLon = (lonPair.first + lonPair.second) / 2.0
+            // radius = half of diagonal
+            val cornerDist = FloatArray(1)
+            Location.distanceBetween(
+                centerLat, centerLon,
+                latPair.first.toDouble(), lonPair.first.toDouble(),
+                cornerDist
+            )
+            geofenceList.add(
+                Geofence.Builder()
+                    .setRequestId(room.roomName)
+                    .setCircularRegion(centerLat, centerLon, cornerDist[0] + 5f)
+                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+                    .build()
+            )
+        }
+        if (geofenceList.isNotEmpty()) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                checkLocationPermission()
+            } else {
+                geofencingClient.addGeofences(
+                    GeofencingRequest.Builder()
+                        .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+                        .addGeofences(geofenceList)
+                        .build(),
+                    PendingIntent.getBroadcast(
+                        this,
+                        0,
+                        Intent(geofenceIntentAction),
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                    )
+                )
+            }
+        }
     }
 
 //    private fun maybeInsertMultipleDummyRooms() {
@@ -271,6 +354,8 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun updateLocation(location: Location) {
+        // Filter out low-accuracy fixes
+        if (location.accuracy > 10f) return
         currentLatitude = location.latitude
         currentLongitude = location.longitude
 
@@ -301,8 +386,6 @@ class RoomOptionsActivity : AppCompatActivity() {
             currentRoomName = null
             currentRoomTextView.text = "Current Room not Found!"
         }
-
-
     }
 
     private fun checkLocationAgainstDatabase(
@@ -574,5 +657,9 @@ class RoomOptionsActivity : AppCompatActivity() {
             // Reset timer for another 10 minutes
             nextPredictionTimeRoom = now + 10 * 60 * 1000L
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(geofenceReceiver)
     }
 }
