@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import kotlin.math.min
+import kotlin.math.max
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -324,16 +326,21 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLon: Double,
         boundary: Pair<Pair<Float, Float>, Pair<Float, Float>>
     ): Boolean {
-        val (minPair, maxPair) = boundary
-        val minLat = minPair.first
-        val minLon = minPair.second
-        val maxLat = maxPair.first
-        val maxLon = maxPair.second
+        // Extract raw values
+        val (latPair, lonPair) = boundary
+        val rawLat1 = latPair.first
+        val rawLat2 = latPair.second
+        val rawLon1 = lonPair.first
+        val rawLon2 = lonPair.second
 
-        // Add margin for GPS inaccuracy
+        // Ensure correct ordering
+        val minLat = min(rawLat1, rawLat2)
+        val maxLat = max(rawLat1, rawLat2)
+        val minLon = min(rawLon1, rawLon2)
+        val maxLon = max(rawLon1, rawLon2)
+
+        // Add margin for GPS inaccuracy (in meters)
         val marginMeters = 5f
-
-        // Convert margin in meters to approximate degrees (latitude/longitude)
         val latMargin = marginMeters / 111000f
         val lonMargin = marginMeters / (111000f * Math.cos(Math.toRadians(currentLat))).toFloat()
 
