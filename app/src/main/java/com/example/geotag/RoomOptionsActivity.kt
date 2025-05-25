@@ -38,8 +38,8 @@ data class LatLngPoint(val lat: Float, val lon: Float)
 class RoomOptionsActivity : AppCompatActivity() {
 
     companion object {
-        private const val ENTRY_EPSILON = 0.00001    // ~8.9 m for entering
-        private const val EXIT_EPSILON  = 0.00001    // ~11.1 m for exiting
+        private const val ENTRY_EPSILON = 0.00008    // ~8.9 m for entering
+        private const val EXIT_EPSILON  = 0.00010    // ~11.1 m for exiting
     }
 
     // User ID from intent
@@ -376,10 +376,10 @@ class RoomOptionsActivity : AppCompatActivity() {
         val minLon = lons.minOrNull() ?: return false
         val maxLon = lons.maxOrNull() ?: return false
 
-        // 3) Epsilon margin in degrees (~8.9 m)
-        val eps = 0.00001
+        // Choose epsilon based on whether we are exiting the current room
+        val eps = if (roomName == currentRoomName) EXIT_EPSILON else ENTRY_EPSILON
 
-        // 4) Return true if within expanded rectangle
+        // Return true if within expanded rectangle
         return currentLat in (minLat - eps)..(maxLat + eps) &&
                currentLon in (minLon - eps)..(maxLon + eps)
     }
