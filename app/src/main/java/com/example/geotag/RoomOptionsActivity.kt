@@ -359,29 +359,29 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
 
+    // Check if current location is within 2 meters of the first calibrated corner
     private fun checkLocationAgainstDatabase(
         roomName: String,
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // 1) Load calibrated polygon corners
+        // Get the saved polygon corners for this room
         val polygon = roomDbHelper.getRoomPolygon(roomName) ?: return false
-        if (polygon.size < 4) return false
+        if (polygon.isEmpty()) return false
 
-        // 2) Compute axis-aligned rectangle bounds from the polygon
-        val lats = polygon.map { it.lat.toDouble() }
-        val lons = polygon.map { it.lon.toDouble() }
-        val minLat = lats.minOrNull() ?: return false
-        val maxLat = lats.maxOrNull() ?: return false
-        val minLon = lons.minOrNull() ?: return false
-        val maxLon = lons.maxOrNull() ?: return false
+        // Take the first corner as the reference point
+        val ref = polygon[0]
+        val results = FloatArray(1)
 
-        // Choose epsilon based on whether we are exiting the current room
-        val eps = if (roomName == currentRoomName) EXIT_EPSILON else ENTRY_EPSILON
+        // Compute distance in meters between current location and reference corner
+        Location.distanceBetween(
+            currentLat, currentLon,
+            ref.lat.toDouble(), ref.lon.toDouble(),
+            results
+        )
 
-        // Return true if within expanded rectangle
-        return currentLat in (minLat - eps)..(maxLat + eps) &&
-               currentLon in (minLon - eps)..(maxLon + eps)
+        // Return true if within 2 meters
+        return results[0] <= 2f
     }
 
     private fun fetchPredictedRoom() {
