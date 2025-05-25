@@ -167,7 +167,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         fetchPredictedRoom()
         // Reset the countdown for another 15 minutes from now
         nextPredictionTime = System.currentTimeMillis() + 15 * 60 * 1000L
-        nextPredictionTimeRoom = System.currentTimeMillis() + 10 * 60 * 1000L
+        nextPredictionTimeRoom = System.currentTimeMillis() + 2 * 60 * 1000L
 
         // Request location permission if not granted
         checkLocationPermission()
@@ -211,8 +211,12 @@ class RoomOptionsActivity : AppCompatActivity() {
         // Start updating countdown when the activity is visible
         countdownHandler.post(countdownRunnable)
 
-        // Attempt to start location updates if permission is granted
-        startLocationUpdates()
+        // One-time fetch last known location and update UI
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) updateLocation(location)
+        }
+        // Do NOT start location updates here
+        // startLocationUpdates()
     }
 
     override fun onPause() {
@@ -250,6 +254,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         if (requestCode == LOCATION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Start location updates when permission is granted
                 startLocationUpdates()
             } else {
                 Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
@@ -269,6 +274,18 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun updateLocation(location: Location) {
+        // Smooth small movements: ignore if moved less than 2 meters
+        if (currentLatitude != 0.0 || currentLongitude != 0.0) {
+            val results = FloatArray(1)
+            Location.distanceBetween(
+                currentLatitude, currentLongitude,
+                location.latitude, location.longitude,
+                results
+            )
+            if (results[0] < 2f) {
+                return
+            }
+        }
         currentLatitude = location.latitude
         currentLongitude = location.longitude
 
@@ -541,8 +558,10 @@ class RoomOptionsActivity : AppCompatActivity() {
                     }
                 }.start()
             }
-            // Reset timer for another 10 minutes
-            nextPredictionTimeRoom = now + 10 * 60 * 1000L
+            // Reset timer for another 2 minutes
+            nextPredictionTimeRoom = now + 2 * 60 * 1000L
+            // After countdown ends, start listening for location updates
+            startLocationUpdates()
         }
     }
 }

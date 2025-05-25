@@ -87,6 +87,13 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         onCreate(db)
     }
 
+    override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_LIGHTS")
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_ROOMS")
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_USERS")
+        onCreate(db)
+    }
+
     /**
      * Optional example if you store BSSID in the same table as roomName.
      * If you have a separate BSSID column, adjust the query accordingly.
