@@ -1,6 +1,8 @@
 
 package com.example.geotag
 
+import kotlin.math.abs
+
 import android.util.Log
 
 import android.Manifest
@@ -372,24 +374,23 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // Fetch polygon corners (in order) for the room
-        val polygon: List<LatLngPoint>? = roomDbHelper.getRoomPolygon(roomName)
+        // Try polygon geofence first
+        val polygon = roomDbHelper.getRoomPolygon(roomName)
         if (polygon != null && polygon.size >= 4) {
-            // Perform point-in-polygon test
-            return isPointInPolygon(
-                LatLngPoint(currentLat.toFloat(), currentLon.toFloat()),
-                polygon
-            )
+            val pt = LatLngPoint(currentLat.toFloat(), currentLon.toFloat())
+            if (isPointInPolygon(pt, polygon)) return true
         }
-        // Fallback to axis-aligned box if polygon data is unavailable
+        // Fallback: axis-aligned bounding box with small epsilon margin
         val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
         val (b1, b2) = boundaries
         val minLat = minOf(b1.first, b2.first).toDouble()
         val maxLat = maxOf(b1.first, b2.first).toDouble()
         val minLon = minOf(b1.second, b2.second).toDouble()
         val maxLon = maxOf(b1.second, b2.second).toDouble()
-        return currentLat >= minLat && currentLat <= maxLat &&
-               currentLon >= minLon && currentLon <= maxLon
+
+        val eps = 0.0001 // ~11 meters
+        return currentLat in (minLat - eps)..(maxLat + eps) &&
+               currentLon in (minLon - eps)..(maxLon + eps)
     }
 
     private fun fetchPredictedRoom() {
