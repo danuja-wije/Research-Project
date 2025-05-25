@@ -59,6 +59,11 @@ private fun isPointInPolygon(point: LatLngPoint, polygon: List<LatLngPoint>): Bo
 
 class RoomOptionsActivity : AppCompatActivity() {
 
+    companion object {
+        private const val ENTRY_EPSILON = 0.00008    // ~8.9 m for entering
+        private const val EXIT_EPSILON  = 0.00010    // ~11.1 m for exiting
+    }
+
     // User ID from intent
     private var userId: Int = -1
 
@@ -410,7 +415,11 @@ class RoomOptionsActivity : AppCompatActivity() {
         val maxLat = maxOf(b1.first, b2.first).toDouble()
         val minLon = minOf(b1.second, b2.second).toDouble()
         val maxLon = maxOf(b1.second, b2.second).toDouble()
-        val epsBox = 0.00008 // ~8.9 meters
+
+        // Choose epsilon based on whether we're exiting the current room
+        val isCurrent = (roomName == currentRoomName)
+        val epsBox = if (isCurrent) EXIT_EPSILON else ENTRY_EPSILON
+
         return currentLat in (minLat - epsBox)..(maxLat + epsBox) &&
                currentLon in (minLon - epsBox)..(maxLon + epsBox)
     }
