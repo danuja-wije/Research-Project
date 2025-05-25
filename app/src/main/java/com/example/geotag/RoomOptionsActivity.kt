@@ -364,18 +364,22 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // Retrieve axis-aligned min/max lat/lon boundaries
-        val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
-        val (minPair, maxPair) = boundaries
-        val minLat = minPair.first.toDouble()
-        val minLon = minPair.second.toDouble()
-        val maxLat = maxPair.first.toDouble()
-        val maxLon = maxPair.second.toDouble()
+        // 1) Load calibrated polygon corners
+        val polygon = roomDbHelper.getRoomPolygon(roomName) ?: return false
+        if (polygon.size < 4) return false
 
-        // Epsilon margin in degrees (~8.9 meters)
+        // 2) Compute axis-aligned rectangle bounds from the polygon
+        val lats = polygon.map { it.lat.toDouble() }
+        val lons = polygon.map { it.lon.toDouble() }
+        val minLat = lats.minOrNull() ?: return false
+        val maxLat = lats.maxOrNull() ?: return false
+        val minLon = lons.minOrNull() ?: return false
+        val maxLon = lons.maxOrNull() ?: return false
+
+        // 3) Epsilon margin in degrees (~8.9 m)
         val eps = 0.00008
 
-        // Return true if current location is within expanded rectangle
+        // 4) Return true if within expanded rectangle
         return currentLat in (minLat - eps)..(maxLat + eps) &&
                currentLon in (minLon - eps)..(maxLon + eps)
     }
