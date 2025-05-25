@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.widget.*
+import com.example.geotag.LatLngPoint
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
@@ -144,9 +145,16 @@ class CalibratedRoomsActivity : AppCompatActivity() {
                 )
             }
 
-            // 4) Subtitle: Range
+            // 4) Subtitle: Range or corners
             val tvRange = TextView(this).apply {
-                text = if (room.minLat == 0f && room.maxLat == 0f) {
+                val corners = roomDbHelper.getRoomPolygon(room.roomName)
+                text = if (corners != null && corners.size >= 4) {
+                    corners.joinToString(separator = "\n") {
+                        "(${it.lat}, ${it.lon})"
+                    }.let { cornerList ->
+                        "Corners:\n$cornerList"
+                    }
+                } else if (room.minLat == 0f && room.maxLat == 0f) {
                     "Range: not calibrated"
                 } else {
                     "Range: (${room.minLat}, ${room.minLon})  (${room.maxLat}, ${room.maxLon})"

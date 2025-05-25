@@ -325,12 +325,20 @@ class RoomOptionsActivity : AppCompatActivity() {
         coordinatesText.text = buildString {
             append("Coords: (lat=$lat, lon=$lon)\n")
             for (room in roomDbHelper.getCalibratedRooms(userId.toString())) {
-                val (b1, b2) = roomDbHelper.getRoomBoundaries(room.roomName)!!
-                val minLat = minOf(b1.first, b2.first)
-                val maxLat = maxOf(b1.first, b2.first)
-                val minLon = minOf(b1.second, b2.second)
-                val maxLon = maxOf(b1.second, b2.second)
-                append("${room.roomName}: lat[$minLat..$maxLat], lon[$minLon..$maxLon]\n")
+                val polygon = roomDbHelper.getRoomPolygon(room.roomName)
+                if (polygon != null && polygon.size >= 4) {
+                    append("${room.roomName} corners:\n")
+                    polygon.forEachIndexed { idx, pt ->
+                        append("  ${idx+1}: (${pt.lat}, ${pt.lon})\n")
+                    }
+                } else {
+                    val (b1, b2) = roomDbHelper.getRoomBoundaries(room.roomName)!!
+                    val minLat = minOf(b1.first, b2.first)
+                    val maxLat = maxOf(b1.first, b2.first)
+                    val minLon = minOf(b1.second, b2.second)
+                    val maxLon = maxOf(b1.second, b2.second)
+                    append("${room.roomName}: lat[$minLat..$maxLat], lon[$minLon..$maxLon]\n")
+                }
             }
         }
 
