@@ -15,8 +15,30 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import com.example.yourapp.MoveLogger
 import com.example.geotag.RoomDatabaseHelper
+import com.example.geotag.LatLngPoint
 
 class LocationLoggingService : Service(), LocationListener {
+
+    /**
+     * Ray-casting algorithm to determine if a point lies within a polygon.
+     * Uses lon as x and lat as y.
+     */
+    private fun isPointInPolygon(point: LatLngPoint, polygon: List<LatLngPoint>): Boolean {
+        var intersects = false
+        val x = point.lon
+        val y = point.lat
+        for (i in polygon.indices) {
+            val j = (i + 1) % polygon.size
+            val xi = polygon[i].lon
+            val yi = polygon[i].lat
+            val xj = polygon[j].lon
+            val yj = polygon[j].lat
+            val intersect = ((yi > y) != (yj > y)) &&
+                    (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+            if (intersect) intersects = !intersects
+        }
+        return intersects
+    }
 
     private lateinit var locationManager: LocationManager
     private lateinit var moveLogger: MoveLogger
@@ -89,6 +111,12 @@ class LocationLoggingService : Service(), LocationListener {
 
         // Check for calibrated rooms and start/stop logging accordingly
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
+
+        Log.d("LocationLoggingService", "Rooms updated: ($rooms)")
+        if (rooms.isEmpty()) {
+            // No calibrated rooms: do not send coordinates
+            return
+        }
         var matchedRoomName: String? = null
         for (room in rooms) {
             if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
@@ -116,14 +144,22 @@ class LocationLoggingService : Service(), LocationListener {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
+        // Try polygon geofence first
+        val polygon = roomDbHelper.getRoomPolygon(roomName)
+        if (polygon != null && polygon.size >= 4) {
+            return isPointInPolygon(
+                LatLngPoint(currentLat.toFloat(), currentLon.toFloat()),
+                polygon
+            )
+        }
+        // Fallback to legacy two-point rectangle
         val boundaries = roomDbHelper.getRoomBoundaries(roomName)
         if (boundaries != null) {
-            val (boundary1, boundary2) = boundaries
-            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
-            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
-            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
-            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
-
+            val (b1, b2) = boundaries
+            val minLat = minOf(b1.first, b2.first).toDouble()
+            val maxLat = maxOf(b1.first, b2.first).toDouble()
+            val minLon = minOf(b1.second, b2.second).toDouble()
+            val maxLon = maxOf(b1.second, b2.second).toDouble()
             return currentLat in minLat..maxLat && currentLon in minLon..maxLon
         }
         return false

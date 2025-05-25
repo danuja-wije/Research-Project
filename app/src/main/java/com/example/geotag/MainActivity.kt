@@ -34,7 +34,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private lateinit var coordinatesText: TextView
     private lateinit var roomDbHelper: RoomDatabaseHelper
 
-    private var currentRoomCoordinates = mutableListOf<Pair<Float, Float>>()
+    // Number of corners to capture for polygon calibration
+    private val REQUIRED_CORNER_COUNT = 4
+    private var currentRoomCoordinates = mutableListOf<LatLngPoint>()
     private var totalRooms = 0
     private var calibratedRooms = 0
     private var isCalibrating = false
@@ -277,6 +279,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
     /** Begin calibration: Wi-Fi first, then GPS fallback */
     fun startCalibration(roomName: String) {
         currentRoomCoordinates.clear()
+        coordinatesText.text = "Calibrating $roomName: corner 1 of $REQUIRED_CORNER_COUNT"
 
         val wifiData = getWifiInfo()
         if (wifiData != null) {
@@ -321,7 +324,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 coordinatesText.text =
                     "($lat, $lon) Calibrating $roomName..."
                 currentRoomCoordinates.add(
-                    Pair(lat.toFloat(), lon.toFloat())
+                    LatLngPoint(lat.toFloat(), lon.toFloat())
                 )
             } else {
                 coordinatesText.text =
@@ -345,7 +348,15 @@ class MainActivity : AppCompatActivity(), LocationListener {
         stopLocationUpdates()
         isCalibrating = false
 
-        if (currentRoomCoordinates.isNotEmpty()) {
+        if (currentRoomCoordinates.size >= REQUIRED_CORNER_COUNT) {
+            val custom = getUserEnteredRoomName(roomName)
+                .ifBlank { roomName }
+            roomDbHelper.saveRoomPolygon(roomName, currentRoomCoordinates)
+            rangeLabel.text = "Calibrated polygon with $REQUIRED_CORNER_COUNT corners ($custom)"
+            addSetupRoomButton(roomName)
+            calibratedRooms++
+        } else if (currentRoomCoordinates.isNotEmpty()) {
+            // Fallback: axis-aligned boundary
             val boundary = storeRoomBoundary()
             val custom = getUserEnteredRoomName(roomName)
                 .ifBlank { roomName }
@@ -456,12 +467,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     /** Compute min/max lat & lon from captured points */
-    private fun storeRoomBoundary():
-            Pair<Pair<Float, Float>, Pair<Float, Float>> {
-        val minLat = currentRoomCoordinates.minOf { it.first }
-        val maxLat = currentRoomCoordinates.maxOf { it.first }
-        val minLon = currentRoomCoordinates.minOf { it.second }
-        val maxLon = currentRoomCoordinates.maxOf { it.second }
+    private fun storeRoomBoundary(): Pair<Pair<Float, Float>, Pair<Float, Float>> {
+        val minLat = currentRoomCoordinates.minOf { it.lat }
+        val maxLat = currentRoomCoordinates.maxOf { it.lat }
+        val minLon = currentRoomCoordinates.minOf { it.lon }
+        val maxLon = currentRoomCoordinates.maxOf { it.lon }
         return Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
     }
 
@@ -486,15 +496,21 @@ class MainActivity : AppCompatActivity(), LocationListener {
     override fun onLocationChanged(location: Location) {
         currentLatitude   = location.latitude
         currentLongitude  = location.longitude
-        val lat           = location.latitude.toFloat()
-        val lon           = location.longitude.toFloat()
+        val lat           = location.latitude
+        val lon           = location.longitude
         coordinatesText.text =
-            "Coordinates: ($lat, $lon)"
-        if (isCalibrating) {
-            currentRoomCoordinates.add(
-                Pair(lat, lon)
-            )
-            Log.d("GeoTag", "Captured: ($lat, $lon)")
+            "Coordinates: (${lat.toFloat()}, ${lon.toFloat()})"
+        if (isCalibrating && currentRoomCoordinates.size < REQUIRED_CORNER_COUNT) {
+            currentRoomCoordinates.add(LatLngPoint(lat.toFloat(), lon.toFloat()))
+            val count = currentRoomCoordinates.size
+            Log.d("GeoTag", "Captured corner $count: ($lat, $lon)")
+            if (count < REQUIRED_CORNER_COUNT) {
+                coordinatesText.text = "Captured corner $count of $REQUIRED_CORNER_COUNT"
+            } else {
+                coordinatesText.text = "Captured all $REQUIRED_CORNER_COUNT corners. Press Stop to finish."
+                // Optionally stop auto-updates now:
+                stopLocationUpdates()
+            }
         }
     }
 

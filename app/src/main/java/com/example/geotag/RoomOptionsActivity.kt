@@ -1,3 +1,4 @@
+
 package com.example.geotag
 
 import android.util.Log
@@ -27,6 +28,31 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+
+// Represents a coordinate point for polygon geofence checks
+data class LatLngPoint(val lat: Float, val lon: Float)
+
+/**
+ * Ray-casting algorithm to determine if a point lies within a polygon.
+ * Uses lon as x and lat as y.
+ */
+private fun isPointInPolygon(point: LatLngPoint, polygon: List<LatLngPoint>): Boolean {
+    var intersects = false
+    val x = point.lon
+    val y = point.lat
+    for (i in polygon.indices) {
+        val j = (i + 1) % polygon.size
+        val xi = polygon[i].lon
+        val yi = polygon[i].lat
+        val xj = polygon[j].lon
+        val yj = polygon[j].lat
+        val intersect = ((yi > y) != (yj > y)) &&
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+        if (intersect) intersects = !intersects
+    }
+    return intersects
+}
+
 class RoomOptionsActivity : AppCompatActivity() {
 
     // User ID from intent
@@ -338,19 +364,24 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        val boundaries = roomDbHelper.getRoomBoundaries(roomName)
-        if (boundaries != null) {
-            val (boundary1, boundary2) = boundaries
-            Log.d("RoomOptions", "Checking room '$roomName' raw boundaries: boundary1=$boundary1, boundary2=$boundary2")
-            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
-            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
-            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
-            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
-            Log.d("RoomOptions", "Room '$roomName' bounds: lat in [$minLat, $maxLat], lon in [$minLon, $maxLon]")
-
-            return currentLat >= minLat && currentLat <= maxLat && currentLon >= minLon && currentLon <= maxLon
+        // Fetch polygon corners (in order) for the room
+        val polygon: List<LatLngPoint>? = roomDbHelper.getRoomPolygon(roomName)
+        if (polygon != null && polygon.size >= 4) {
+            // Perform point-in-polygon test
+            return isPointInPolygon(
+                LatLngPoint(currentLat.toFloat(), currentLon.toFloat()),
+                polygon
+            )
         }
-        return false
+        // Fallback to axis-aligned box if polygon data is unavailable
+        val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
+        val (b1, b2) = boundaries
+        val minLat = minOf(b1.first, b2.first).toDouble()
+        val maxLat = maxOf(b1.first, b2.first).toDouble()
+        val minLon = minOf(b1.second, b2.second).toDouble()
+        val maxLon = maxOf(b1.second, b2.second).toDouble()
+        return currentLat >= minLat && currentLat <= maxLat &&
+               currentLon >= minLon && currentLon <= maxLon
     }
 
     private fun fetchPredictedRoom() {

@@ -1,4 +1,7 @@
 package com.example.geotag
+import android.database.sqlite.SQLiteException
+
+
 
 import android.content.ContentValues
 import android.content.Context
@@ -18,7 +21,7 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
 
     companion object {
         private const val DATABASE_NAME = "GeoTag.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         // User table
         private const val TABLE_USERS = "Users"
@@ -34,11 +37,28 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         private const val COLUMN_MAX_LON = "maxLon"
         private const val COLUMN_USER_ID = "userId"
 
+        // Legacy corner columns in CalibratedRooms table
+        private const val COLUMN_LAT1 = "lat1"
+        private const val COLUMN_LON1 = "lon1"
+        private const val COLUMN_LAT2 = "lat2"
+        private const val COLUMN_LON2 = "lon2"
+        private const val COLUMN_LAT3 = "lat3"
+        private const val COLUMN_LON3 = "lon3"
+        private const val COLUMN_LAT4 = "lat4"
+        private const val COLUMN_LON4 = "lon4"
+
         // Lights table
         private const val TABLE_LIGHTS = "Lights"
         private const val COLUMN_LIGHT_NAME = "lightName"
         private const val COLUMN_BRIGHTNESS = "brightness"
         private const val COLUMN_MANUAL_CONTROL = "manualControl"
+
+        // Polygon corners table
+        private const val TABLE_ROOM_POLYGONS = "RoomPolygons"
+        private const val COLUMN_POLY_ROOM_NAME = "roomName"
+        private const val COLUMN_POLY_POINT_INDEX = "pointIndex"
+        private const val COLUMN_POLY_LAT = "lat"
+        private const val COLUMN_POLY_LON = "lon"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -78,9 +98,23 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         db.execSQL(createUserTableQuery)
         db.execSQL(createRoomsTableQuery)
         db.execSQL(createLightsTableQuery)
+
+        // Create RoomPolygons table for storing calibration corners
+        val createPolyTableQuery = """
+            CREATE TABLE $TABLE_ROOM_POLYGONS (
+                $COLUMN_POLY_ROOM_NAME TEXT,
+                $COLUMN_POLY_POINT_INDEX INTEGER,
+                $COLUMN_POLY_LAT REAL,
+                $COLUMN_POLY_LON REAL,
+                PRIMARY KEY($COLUMN_POLY_ROOM_NAME, $COLUMN_POLY_POINT_INDEX),
+                FOREIGN KEY($COLUMN_POLY_ROOM_NAME) REFERENCES $TABLE_ROOMS($COLUMN_ROOM_NAME)
+            )
+        """.trimIndent()
+        db.execSQL(createPolyTableQuery)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS $TABLE_ROOM_POLYGONS")
         db.execSQL("DROP TABLE IF EXISTS $TABLE_LIGHTS")
         db.execSQL("DROP TABLE IF EXISTS $TABLE_ROOMS")
         db.execSQL("DROP TABLE IF EXISTS $TABLE_USERS")
@@ -167,15 +201,17 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
 
     /**
      * Retrieves all rooms for the given userId.
+     * Uses polygon corners if available, otherwise falls back to stored boundaries.
      */
     fun getCalibratedRooms(userId: String): List<Room> {
         val db = readableDatabase
         val rooms = mutableListOf<Room>()
+        // Query only room names for this user
         val cursor = db.query(
             TABLE_ROOMS,
-            null,
+            arrayOf(COLUMN_ROOM_NAME),
             "$COLUMN_USER_ID = ?",
-            arrayOf(userId.toString()),
+            arrayOf(userId),
             null,
             null,
             null
@@ -183,12 +219,25 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         cursor.use {
             if (it.moveToFirst()) {
                 do {
-                    val roomName = it.getString(it.getColumnIndexOrThrow(COLUMN_ROOM_NAME))
-                    val minLat = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MIN_LAT))
-                    val maxLat = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MAX_LAT))
-                    val minLon = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MIN_LON))
-                    val maxLon = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MAX_LON))
-                    rooms.add(Room(roomName, minLat, maxLat, minLon, maxLon))
+                    val name = it.getString(it.getColumnIndexOrThrow(COLUMN_ROOM_NAME))
+                    // Try polygon corners first
+                    val polygon = getRoomPolygon(name)
+                    val (minLat, maxLat, minLon, maxLon) = if (polygon != null && polygon.size >= 4) {
+                        val lats = polygon.map { it.lat }
+                        val lons = polygon.map { it.lon }
+                        listOf(
+                            lats.minOrNull() ?: 0f,
+                            lats.maxOrNull() ?: 0f,
+                            lons.minOrNull() ?: 0f,
+                            lons.maxOrNull() ?: 0f
+                        )
+                    } else {
+                        // Fallback to stored axis-aligned boundaries
+                        getRoomBoundaries(name)?.let { (minPair, maxPair) ->
+                            listOf(minPair.first, maxPair.first, minPair.second, maxPair.second)
+                        } ?: listOf(0f, 0f, 0f, 0f)
+                    }
+                    rooms.add(Room(name, minLat, maxLat, minLon, maxLon))
                 } while (it.moveToNext())
             }
         }
@@ -196,31 +245,68 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
     }
 
     /**
-     * Retrieves the boundaries for the given room name.
-     * Returns a Pair where the first element is a Pair(minLat, minLon) and the second is a Pair(maxLat, maxLon).
-     * Returns null if no room is found.
+     * Retrieves min/max latitude and longitude for the given room.
+     * Tries stored minLat/minLon columns first, falls back to four corner columns if needed.
      */
     fun getRoomBoundaries(roomName: String): Pair<Pair<Float, Float>, Pair<Float, Float>>? {
-        val db = this.readableDatabase
-        val cursor = db.query(
+        val db = readableDatabase
+        // Attempt to read legacy min/max columns
+        try {
+            val cursor = db.query(
+                TABLE_ROOMS,
+                arrayOf(COLUMN_MIN_LAT, COLUMN_MAX_LAT, COLUMN_MIN_LON, COLUMN_MAX_LON),
+                "$COLUMN_ROOM_NAME = ?",
+                arrayOf(roomName),
+                null, null, null
+            )
+            cursor.use {
+                if (it.moveToFirst()) {
+                    val minLat = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MIN_LAT))
+                    val maxLat = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MAX_LAT))
+                    val minLon = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MIN_LON))
+                    val maxLon = it.getFloat(it.getColumnIndexOrThrow(COLUMN_MAX_LON))
+                    return Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+                }
+            }
+        } catch (e: SQLiteException) {
+            // missing columns/table: ignore
+        }
+
+        // Fallback to four corner columns
+        val cursor2 = db.query(
             TABLE_ROOMS,
-            arrayOf(COLUMN_MIN_LAT, COLUMN_MAX_LAT, COLUMN_MIN_LON, COLUMN_MAX_LON),
+            arrayOf(
+                COLUMN_LAT1, COLUMN_LON1,
+                COLUMN_LAT2, COLUMN_LON2,
+                COLUMN_LAT3, COLUMN_LON3,
+                COLUMN_LAT4, COLUMN_LON4
+            ),
             "$COLUMN_ROOM_NAME = ?",
             arrayOf(roomName),
-            null,
-            null,
-            null
+            null, null, null
         )
-        var boundaries: Pair<Pair<Float, Float>, Pair<Float, Float>>? = null
-        if (cursor.moveToFirst()) {
-            val minLat = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MIN_LAT))
-            val maxLat = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MAX_LAT))
-            val minLon = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MIN_LON))
-            val maxLon = cursor.getFloat(cursor.getColumnIndexOrThrow(COLUMN_MAX_LON))
-            boundaries = Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+        cursor2.use {
+            if (it.moveToFirst()) {
+                val lats = listOf(
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT1)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT2)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT3)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT4))
+                )
+                val lons = listOf(
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON1)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON2)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON3)),
+                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON4))
+                )
+                val minLat = lats.minOrNull() ?: return null
+                val maxLat = lats.maxOrNull() ?: return null
+                val minLon = lons.minOrNull() ?: return null
+                val maxLon = lons.maxOrNull() ?: return null
+                return Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+            }
         }
-        cursor.close()
-        return boundaries
+        return null
     }
 
     // Light management
@@ -269,5 +355,63 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
             }
         }
         return lights
+    }
+
+    /**
+     * Saves a polygon (ordered corners) for the given room.
+     */
+    fun saveRoomPolygon(roomName: String, polygon: List<LatLngPoint>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // Clear existing corners
+            db.delete(TABLE_ROOM_POLYGONS, "$COLUMN_POLY_ROOM_NAME=?", arrayOf(roomName))
+            // Insert each corner with its index to preserve order
+            val values = ContentValues()
+            for ((index, point) in polygon.withIndex()) {
+                values.clear()
+                values.put(COLUMN_POLY_ROOM_NAME, roomName)
+                values.put(COLUMN_POLY_POINT_INDEX, index)
+                values.put(COLUMN_POLY_LAT, point.lat)
+                values.put(COLUMN_POLY_LON, point.lon)
+                db.insert(TABLE_ROOM_POLYGONS, null, values)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Retrieves the ordered polygon corners for the given room.
+     */
+    fun getRoomPolygon(roomName: String): List<LatLngPoint>? {
+        val db = readableDatabase
+        val corners = mutableListOf<LatLngPoint>()
+        // Try querying the polygon table; if it doesn't exist, fallback
+        val cursor = try {
+            db.query(
+                TABLE_ROOM_POLYGONS,
+                arrayOf(COLUMN_POLY_POINT_INDEX, COLUMN_POLY_LAT, COLUMN_POLY_LON),
+                "$COLUMN_POLY_ROOM_NAME = ?",
+                arrayOf(roomName),
+                null,
+                null,
+                "$COLUMN_POLY_POINT_INDEX ASC"
+            )
+        } catch (e: SQLiteException) {
+            // Table doesn't exist or other DB error
+            return null
+        }
+
+        cursor.use {
+            if (!it.moveToFirst()) return null
+            do {
+                val lat = it.getFloat(it.getColumnIndexOrThrow(COLUMN_POLY_LAT))
+                val lon = it.getFloat(it.getColumnIndexOrThrow(COLUMN_POLY_LON))
+                corners.add(LatLngPoint(lat, lon))
+            } while (it.moveToNext())
+        }
+        return corners
     }
 }
