@@ -112,6 +112,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
         override fun run() {
             updateCountdown()
+
             updateCountdownRoom()
             // Update every 1 second
             countdownHandler.postDelayed(this, 1000L)
@@ -211,6 +212,10 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         // Request location permission if not granted
         checkLocationPermission()
+        // Fetch a fresh location update once when the activity opens
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            loc?.let { updateLocation(it) }
+        }
     }
 
 //    private fun maybeInsertMultipleDummyRooms() {
