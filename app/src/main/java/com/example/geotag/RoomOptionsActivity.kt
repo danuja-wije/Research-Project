@@ -383,8 +383,8 @@ class RoomOptionsActivity : AppCompatActivity() {
             // 1) exact point-in-polygon
             if (isPointInPolygon(pt, polygon)) return true
 
-            // 2) fallback: “expand” the polygon outward by eps along each vertex
-            val eps = 0.00005f  // smaller ~5m tolerance
+            // 2) expanded polygon check
+            val eps = 0.00002f
             val centerLat = polygon.map { it.lat }.average().toFloat()
             val centerLon = polygon.map { it.lon }.average().toFloat()
             val expanded = polygon.map { p ->
@@ -398,19 +398,21 @@ class RoomOptionsActivity : AppCompatActivity() {
             }
             if (isPointInPolygon(pt, expanded)) return true
 
+            // Polygon calibrated but point not inside it
             return false
-        }
-        // Fallback: axis-aligned bounding box with small epsilon margin
-        val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
-        val (b1, b2) = boundaries
-        val minLat = minOf(b1.first, b2.first).toDouble()
-        val maxLat = maxOf(b1.first, b2.first).toDouble()
-        val minLon = minOf(b1.second, b2.second).toDouble()
-        val maxLon = maxOf(b1.second, b2.second).toDouble()
+        } else {
+            // No polygon: fall back to rectangle
+            val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
+            val (b1, b2) = boundaries
+            val minLat = minOf(b1.first, b2.first).toDouble()
+            val maxLat = maxOf(b1.first, b2.first).toDouble()
+            val minLon = minOf(b1.second, b2.second).toDouble()
+            val maxLon = maxOf(b1.second, b2.second).toDouble()
 
-        val eps = 0.0001 // ~11 meters
-        return currentLat in (minLat - eps)..(maxLat + eps) &&
-               currentLon in (minLon - eps)..(maxLon + eps)
+            val eps = 0.0001 // ~11 meters
+            return currentLat in (minLat - eps)..(maxLat + eps) &&
+                   currentLon in (minLon - eps)..(maxLon + eps)
+        }
     }
 
     private fun fetchPredictedRoom() {
