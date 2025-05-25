@@ -1,13 +1,12 @@
 package com.example.geotag
 
-import android.content.Context
-import android.content.Intent
+import android.util.Log
+
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import kotlin.math.min
-import kotlin.math.max
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -52,7 +51,7 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var nextPredictionTimeRoom: Long = 0L
 
     // Coordinates display
-//    private lateinit var coordinatesText: TextView
+    private lateinit var coordinatesText: TextView
 
     // Holds the currently predicted room name
     private var predictedRoomName: String? = null
@@ -70,14 +69,6 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var currentLatitude = 0.0
     private var currentLongitude = 0.0
 
-    // Smoothing + dwell-time
-    private val locationBuffer = ArrayDeque<Pair<Double, Double>>()
-    private val bufferSize = 5
-    private val dwellTimeMillis = 3000L
-    private var lastDetectedRoom: String? = null
-    private var lastMatchStart = 0L
-
-
     // Handler + runnable to update countdown every second
     private val countdownHandler = Handler(Looper.getMainLooper())
     private val countdownRunnable = object : Runnable {
@@ -89,7 +80,6 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_room_options)
@@ -134,7 +124,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentRoomTextView = findViewById(R.id.currentRoom)
         lightText = findViewById(R.id.light_text)
         greeting = findViewById(R.id.tvGreeting)
-//        coordinatesText = findViewById(R.id.coordinatesText)
+        coordinatesText = findViewById(R.id.coordinatesText)
         greeting.text = getGreetings()
 // If we already had a predicted room, show it
         if (!predictedRoomName.isNullOrEmpty()) {
@@ -281,74 +271,68 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun updateLocation(location: Location) {
-        if (location.accuracy > 10f) return
-        // buffer & smooth
-        locationBuffer.addLast(location.latitude to location.longitude)
-        if (locationBuffer.size > bufferSize) locationBuffer.removeFirst()
-        if (locationBuffer.size < bufferSize) return
+        currentLatitude = location.latitude
+        currentLongitude = location.longitude
+        Log.d("RoomOptions", "Current coords: lat=$currentLatitude, lon=$currentLongitude")
 
-        val avgLat = locationBuffer.map { it.first }.average()
-        val avgLon = locationBuffer.map { it.second }.average()
-
-        // test each room's 4 corners
-        val match = roomDbHelper.getCalibratedRooms(userId.toString())
-            .mapNotNull { rc ->
-                roomDbHelper.getRoomCorners(rc.roomName)?.let { rc.roomName to it }
-            }
-            .firstOrNull { (_, corners) ->
-                isPointInPolygon(avgLat, avgLon, corners)
-            }?.first
-
-        val now = System.currentTimeMillis()
-        when {
-            match == null -> {
-                lastDetectedRoom = null
-                lastMatchStart = 0L
-                runOnUiThread { currentRoomTextView.text = "Current Room not Found!" }
-            }
-            match != lastDetectedRoom -> {
-                // New room detected: reset dwell timer and update UI immediately
-                lastDetectedRoom = match
-                lastMatchStart = now
-                runOnUiThread { currentRoomTextView.text = match }
-            }
-            now - lastMatchStart >= dwellTimeMillis -> {
-                // Sustained in same room beyond dwell time: confirm
-                runOnUiThread { currentRoomTextView.text = match }
+        val lat = currentLatitude.toFloat()
+        val lon = currentLongitude.toFloat()
+        coordinatesText.text = buildString {
+            append("Coords: (lat=$lat, lon=$lon)\n")
+            for (room in roomDbHelper.getCalibratedRooms(userId.toString())) {
+                val (b1, b2) = roomDbHelper.getRoomBoundaries(room.roomName)!!
+                val minLat = minOf(b1.first, b2.first)
+                val maxLat = maxOf(b1.first, b2.first)
+                val minLon = minOf(b1.second, b2.second)
+                val maxLon = maxOf(b1.second, b2.second)
+                append("${room.roomName}: lat[$minLat..$maxLat], lon[$minLon..$maxLon]\n")
             }
         }
-    }
-    /** Ray-casting point-in-polygon */
-    private fun isPointInPolygon(
-        lat: Double, lon: Double,
-        corners: List<Pair<Float, Float>>
-    ): Boolean {
-        var inside = false
-        val n = corners.size
-        for (i in 0 until n) {
-            val (y1, x1) = corners[i]
-            val (y2, x2) = corners[(i + 1) % n]
-            if (((y1 > lat) != (y2 > lat)) &&
-                (lon < (x2 - x1) * (lat - y1) / (y2 - y1) + x1)
-            ) inside = !inside
+
+        // Check calibrated rooms
+        val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
+        if (rooms.isEmpty()) {
+            actualRoomTextView.text = ""
+            return
         }
-        return inside
+        currentRoomTextView.text = "Current Room not Found!"
+        // Determine which room (if any) the current coordinates fall into
+        var matchedRoomName: String? = null
+        for (room in rooms) {
+            if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
+                matchedRoomName = room.roomName
+                break
+            }
+        }
+        // Update UI based on match result
+        if (matchedRoomName != null) {
+            currentRoomName = matchedRoomName
+            currentRoomTextView.text = matchedRoomName
+        } else {
+            currentRoomName = null
+            currentRoomTextView.text = "Current Room not Found!"
+        }
     }
 
-
-    /**
-     * Check if the given current coordinates lie within the calibrated room boundary
-     * defined by four corners.
-     */
     private fun checkLocationAgainstDatabase(
         roomName: String,
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        val corners = roomDbHelper.getRoomCorners(roomName)
-        return corners?.let { isPointInPolygon(currentLat, currentLon, it) } ?: false
-    }
+        val boundaries = roomDbHelper.getRoomBoundaries(roomName)
+        if (boundaries != null) {
+            val (boundary1, boundary2) = boundaries
+            Log.d("RoomOptions", "Checking room '$roomName' raw boundaries: boundary1=$boundary1, boundary2=$boundary2")
+            val minLat = minOf(boundary1.first, boundary2.first).toDouble()
+            val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
+            val minLon = minOf(boundary1.second, boundary2.second).toDouble()
+            val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
+            Log.d("RoomOptions", "Room '$roomName' bounds: lat in [$minLat, $maxLat], lon in [$minLon, $maxLon]")
 
+            return currentLat >= minLat && currentLat <= maxLat && currentLon >= minLon && currentLon <= maxLon
+        }
+        return false
+    }
 
     private fun fetchPredictedRoom() {
         lightText.text = "ON"
@@ -573,8 +557,5 @@ class RoomOptionsActivity : AppCompatActivity() {
             // Reset timer for another 10 minutes
             nextPredictionTimeRoom = now + 10 * 60 * 1000L
         }
-    }
-    override fun onDestroy() {
-        super.onDestroy()
     }
 }
