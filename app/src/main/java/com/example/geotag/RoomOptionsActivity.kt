@@ -38,8 +38,8 @@ data class LatLngPoint(val lat: Float, val lon: Float)
 class RoomOptionsActivity : AppCompatActivity() {
 
     companion object {
-        private const val ENTRY_EPSILON = 0.00008    // ~8.9 m for entering
-        private const val EXIT_EPSILON  = 0.00010    // ~11.1 m for exiting
+        private const val ENTRY_EPSILON = 0.00002    // ~2.2 m for entering
+        private const val EXIT_EPSILON  = 0.00003    // ~3.3 m for exiting
     }
 
     // User ID from intent
