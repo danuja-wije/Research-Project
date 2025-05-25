@@ -2,6 +2,8 @@
 package com.example.geotag
 
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
 import android.util.Log
 
@@ -378,7 +380,25 @@ class RoomOptionsActivity : AppCompatActivity() {
         val polygon = roomDbHelper.getRoomPolygon(roomName)
         if (polygon != null && polygon.size >= 4) {
             val pt = LatLngPoint(currentLat.toFloat(), currentLon.toFloat())
+            // 1) exact point-in-polygon
             if (isPointInPolygon(pt, polygon)) return true
+
+            // 2) fallback: “expand” the polygon outward by eps along each vertex
+            val eps = 0.00005f  // smaller ~5m tolerance
+            val centerLat = polygon.map { it.lat }.average().toFloat()
+            val centerLon = polygon.map { it.lon }.average().toFloat()
+            val expanded = polygon.map { p ->
+                val dx = p.lat - centerLat
+                val dy = p.lon - centerLon
+                val dist = sqrt(dx*dx + dy*dy).takeIf { it > 0f } ?: eps
+                LatLngPoint(
+                    p.lat + (dx / dist) * eps,
+                    p.lon + (dy / dist) * eps
+                )
+            }
+            if (isPointInPolygon(pt, expanded)) return true
+
+            return false
         }
         // Fallback: axis-aligned bounding box with small epsilon margin
         val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
