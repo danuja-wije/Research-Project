@@ -384,7 +384,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             if (isPointInPolygon(pt, polygon)) return true
 
             // 2) expanded polygon check
-            val eps = 0.00002f
+            val eps = 0.00001f
             val centerLat = polygon.map { it.lat }.average().toFloat()
             val centerLon = polygon.map { it.lon }.average().toFloat()
             val expanded = polygon.map { p ->
@@ -397,22 +397,19 @@ class RoomOptionsActivity : AppCompatActivity() {
                 )
             }
             if (isPointInPolygon(pt, expanded)) return true
-
-            // Polygon calibrated but point not inside it
-            return false
-        } else {
-            // No polygon: fall back to rectangle
-            val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
-            val (b1, b2) = boundaries
-            val minLat = minOf(b1.first, b2.first).toDouble()
-            val maxLat = maxOf(b1.first, b2.first).toDouble()
-            val minLon = minOf(b1.second, b2.second).toDouble()
-            val maxLon = maxOf(b1.second, b2.second).toDouble()
-
-            val eps = 0.0001 // ~11 meters
-            return currentLat in (minLat - eps)..(maxLat + eps) &&
-                   currentLon in (minLon - eps)..(maxLon + eps)
+            // Polygon calibrated but point not inside it: fall through to rectangle fallback
         }
+        // Rectangle fallback (always run if not already returned true)
+        val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
+        val (b1, b2) = boundaries
+        val minLat = minOf(b1.first, b2.first).toDouble()
+        val maxLat = maxOf(b1.first, b2.first).toDouble()
+        val minLon = minOf(b1.second, b2.second).toDouble()
+        val maxLon = maxOf(b1.second, b2.second).toDouble()
+
+        val eps = 0.0001 // ~11 meters
+        return currentLat in (minLat - eps)..(maxLat + eps) &&
+               currentLon in (minLon - eps)..(maxLon + eps)
     }
 
     private fun fetchPredictedRoom() {
