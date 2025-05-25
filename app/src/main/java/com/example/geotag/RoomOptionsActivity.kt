@@ -279,40 +279,44 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun updateLocation(location: Location) {
-        // Smooth small movements: ignore if moved less than 2 meters
-        if (currentLatitude != 0.0 || currentLongitude != 0.0) {
-            val results = FloatArray(1)
-            Location.distanceBetween(
-                currentLatitude, currentLongitude,
-                location.latitude, location.longitude,
-                results
-            )
-            if (results[0] < 1f) {
-                return
-            }
-        }
-        currentLatitude = location.latitude
-        currentLongitude = location.longitude
+        val newLat = location.latitude
+        val newLon = location.longitude
 
-        val lat = currentLatitude.toFloat()
-        val lon = currentLongitude.toFloat()
-//        coordinatesText.text = "Coordinates: ($lat, $lon)"
-
-        // Check calibrated rooms
+        // Check calibrated rooms with new coordinates
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
         if (rooms.isEmpty()) {
             actualRoomTextView.text = ""
             return
         }
-        currentRoomTextView.text = "Current Room not Found!"
-        // Determine which room (if any) the current coordinates fall into
         var matchedRoomName: String? = null
         for (room in rooms) {
-            if (checkLocationAgainstDatabase(room.roomName, currentLatitude, currentLongitude)) {
+            if (checkLocationAgainstDatabase(room.roomName, newLat, newLon)) {
                 matchedRoomName = room.roomName
                 break
             }
         }
+
+        // Smooth small movements: skip if still in same room and moved less than 2 meters
+        if ((currentLatitude != 0.0 || currentLongitude != 0.0)) {
+            val results = FloatArray(1)
+            Location.distanceBetween(
+                currentLatitude, currentLongitude,
+                newLat, newLon,
+                results
+            )
+            if (results[0] < 2f && matchedRoomName == currentRoomName) {
+                return
+            }
+        }
+        currentLatitude = newLat
+        currentLongitude = newLon
+
+        // Optionally display coordinates if needed
+        // val lat = currentLatitude.toFloat()
+        // val lon = currentLongitude.toFloat()
+        // coordinatesText.text = "Coordinates: ($lat, $lon)"
+
+        currentRoomTextView.text = "Current Room not Found!"
         // Update UI based on match result
         if (matchedRoomName != null) {
             currentRoomName = matchedRoomName
@@ -321,8 +325,6 @@ class RoomOptionsActivity : AppCompatActivity() {
             currentRoomName = null
             currentRoomTextView.text = "Current Room not Found!"
         }
-
-
     }
 
     private fun checkLocationAgainstDatabase(
@@ -383,7 +385,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
         dateFormat.timeZone = TimeZone.getTimeZone("UTC")
         val timestamp = dateFormat.format(Date())
-        Toast.makeText(this, "Time stamp : $timestamp", Toast.LENGTH_SHORT).show()
+//        Toast.makeText(this, "Time stamp : $timestamp", Toast.LENGTH_SHORT).show()
         val jsonBody = JSONObject().apply {
             put("timestamp", timestamp)
             put("user_id", "User1")

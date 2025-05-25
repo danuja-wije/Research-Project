@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         else             generateRoomViews(2)
 
         requestAllRequiredPermissions()
-        showConnectionToast()
+//        showConnectionToast()
     }
 
     override fun onStart() {
@@ -246,14 +246,14 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     /** Toast whether Wi-Fi or GPS is in use */
-    private fun showConnectionToast() {
-        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager?
-        if (wm != null && wm.isWifiEnabled) {
-            Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
-        }
-    }
+//    private fun showConnectionToast() {
+//        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager?
+//        if (wm != null && wm.isWifiEnabled) {
+////            Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
+//        } else {
+////            Toast.makeText(this, "Using Wi-Fi", Toast.LENGTH_SHORT).show()
+//        }
+//    }
 
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
@@ -520,8 +520,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
         wm.startScan()
         val results = wm.scanResults
-        Toast.makeText(this, "scan results $results", Toast.LENGTH_SHORT)
-            .show()
+//        Toast.makeText(this, "scan results $results", Toast.LENGTH_SHORT)
+//            .show()
         if (results.isEmpty()) return null
         val strongest = results.maxByOrNull { it.level }
         return strongest?.let { Pair(it.BSSID, it.level) }

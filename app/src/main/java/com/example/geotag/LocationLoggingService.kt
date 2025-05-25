@@ -51,7 +51,7 @@ class LocationLoggingService : Service(), LocationListener {
         if (intent != null) {
             userId = intent.getIntExtra("USER_ID", -1)
             if (userId == -1) {
-                Toast.makeText(this, "Invalid User ID", Toast.LENGTH_SHORT).show()
+//                Toast.makeText(this, "Invalid User ID", Toast.LENGTH_SHORT).show()
                 stopSelf()
                 return START_NOT_STICKY
             }
