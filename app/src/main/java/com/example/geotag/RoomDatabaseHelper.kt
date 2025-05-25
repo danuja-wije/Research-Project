@@ -200,45 +200,69 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
     }
 
     /**
-     * Retrieves all rooms for the given userId.
-     * Uses polygon corners if available, otherwise falls back to stored boundaries.
+     * Retrieves all calibrated rooms for the given userId.
+     * Merges legacy CalibratedRooms entries and polygon-only entries.
      */
     fun getCalibratedRooms(userId: String): List<Room> {
         val db = readableDatabase
-        val rooms = mutableListOf<Room>()
-        // Query only room names for this user
-        val cursor = db.query(
+        val names = mutableSetOf<String>()
+
+        // 1) Legacy two-point entries
+        db.query(
             TABLE_ROOMS,
             arrayOf(COLUMN_ROOM_NAME),
             "$COLUMN_USER_ID = ?",
             arrayOf(userId),
-            null,
-            null,
-            null
-        )
-        cursor.use {
-            if (it.moveToFirst()) {
+            null, null, null
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
                 do {
-                    val name = it.getString(it.getColumnIndexOrThrow(COLUMN_ROOM_NAME))
-                    // Try polygon corners first
-                    val polygon = getRoomPolygon(name)
-                    val (minLat, maxLat, minLon, maxLon) = if (polygon != null && polygon.size >= 4) {
-                        val lats = polygon.map { it.lat }
-                        val lons = polygon.map { it.lon }
-                        listOf(
-                            lats.minOrNull() ?: 0f,
-                            lats.maxOrNull() ?: 0f,
-                            lons.minOrNull() ?: 0f,
-                            lons.maxOrNull() ?: 0f
-                        )
-                    } else {
-                        // Fallback to stored axis-aligned boundaries
-                        getRoomBoundaries(name)?.let { (minPair, maxPair) ->
-                            listOf(minPair.first, maxPair.first, minPair.second, maxPair.second)
-                        } ?: listOf(0f, 0f, 0f, 0f)
-                    }
-                    rooms.add(Room(name, minLat, maxLat, minLon, maxLon))
-                } while (it.moveToNext())
+                    names.add(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ROOM_NAME)))
+                } while (cursor.moveToNext())
+            }
+        }
+
+        // 2) Polygon-only entries
+        try {
+            db.query(
+                TABLE_ROOM_POLYGONS,
+                arrayOf(COLUMN_POLY_ROOM_NAME),
+                null, null,
+                COLUMN_POLY_ROOM_NAME, null, null
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    do {
+                        names.add(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_POLY_ROOM_NAME)))
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (_: SQLiteException) {
+            // Table might not exist yet
+        }
+
+        val rooms = mutableListOf<Room>()
+        for (name in names) {
+            // Prefer polygon calibration
+            val polygon = getRoomPolygon(name)
+            if (polygon != null && polygon.size >= 4) {
+                val lats = polygon.map { it.lat }
+                val lons = polygon.map { it.lon }
+                val minLat = lats.minOrNull() ?: 0f
+                val maxLat = lats.maxOrNull() ?: 0f
+                val minLon = lons.minOrNull() ?: 0f
+                val maxLon = lons.maxOrNull() ?: 0f
+                rooms.add(Room(name, minLat, maxLat, minLon, maxLon))
+            } else {
+                // Fallback to stored boundaries
+                getRoomBoundaries(name)?.let { (minP, maxP) ->
+                    rooms.add(Room(
+                        name,
+                        minP.first,        // minLat
+                        maxP.first,        // maxLat
+                        minP.second,       // minLon
+                        maxP.second        // maxLon
+                    ))
+                }
             }
         }
         return rooms
