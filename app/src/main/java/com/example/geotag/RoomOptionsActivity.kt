@@ -13,6 +13,7 @@ import android.os.Looper
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
@@ -22,6 +23,8 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 class RoomOptionsActivity : AppCompatActivity() {
@@ -69,9 +72,14 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var currentLatitude = 0.0
     private var currentLongitude = 0.0
 
+    // Minimum movement threshold (in meters) to consider as "moved"
+    private val MOVEMENT_THRESHOLD_METERS = 2f
+    private var lastLocation: Location? = null
+
     // Handler + runnable to update countdown every second
     private val countdownHandler = Handler(Looper.getMainLooper())
     private val countdownRunnable = object : Runnable {
+        @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
         override fun run() {
             updateCountdown()
             updateCountdownRoom()
@@ -169,7 +177,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         fetchPredictedRoom()
         // Reset the countdown for another 15 minutes from now
         nextPredictionTime = System.currentTimeMillis() + 15 * 60 * 1000L
-        nextPredictionTimeRoom = System.currentTimeMillis() + 10 * 60 * 1000L
+        nextPredictionTimeRoom = System.currentTimeMillis() + 2 * 60 * 1000L
 
         // Request location permission if not granted
         checkLocationPermission()
@@ -213,8 +221,8 @@ class RoomOptionsActivity : AppCompatActivity() {
         // Start updating countdown when the activity is visible
         countdownHandler.post(countdownRunnable)
 
-        // Attempt to start location updates if permission is granted
-        startLocationUpdates()
+        // Do not start continuous location updates here; rely on periodic one-shot fetch in updateCountdownRoom()
+        // startLocationUpdates()
     }
 
     override fun onPause() {
@@ -271,6 +279,17 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun updateLocation(location: Location) {
+        // Ignore small GPS fluctuations if device hasn’t moved more than threshold
+        lastLocation?.let { prev ->
+            val distance = location.distanceTo(prev)
+            if (distance < MOVEMENT_THRESHOLD_METERS) {
+                // Device effectively stationary; skip processing
+                return
+            }
+        }
+        // Update lastLocation now that movement is confirmed
+        lastLocation = location
+
         currentLatitude = location.latitude
         currentLongitude = location.longitude
         Log.d("RoomOptions", "Current coords: lat=$currentLatitude, lon=$currentLongitude")
@@ -473,6 +492,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             nextPredictionTime = now + 15 * 60 * 1000L
         }
     }
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun updateCountdownRoom() {
         val now = System.currentTimeMillis()
         val diff = nextPredictionTimeRoom - now
@@ -502,7 +522,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
                 Thread {
                     try {
-                        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        val connection = URL(url).openConnection() as HttpURLConnection
                         connection.requestMethod = "POST"
                         connection.setRequestProperty("Content-Type", "application/json")
                         connection.doOutput = true
@@ -536,7 +556,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
                 Thread {
                     try {
-                        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        val connection = URL(url).openConnection() as HttpURLConnection
                         connection.requestMethod = "POST"
                         connection.setRequestProperty("Content-Type", "application/json")
                         connection.doOutput = true
@@ -554,8 +574,12 @@ class RoomOptionsActivity : AppCompatActivity() {
                     }
                 }.start()
             }
-            // Reset timer for another 10 minutes
-            nextPredictionTimeRoom = now + 10 * 60 * 1000L
+            // Fetch a fresh location update once
+            fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                loc?.let { updateLocation(it) }
+            }
+            // Reset timer for another 2 minutes
+            nextPredictionTimeRoom = now + 2 * 60 * 1000L
         }
     }
 }
