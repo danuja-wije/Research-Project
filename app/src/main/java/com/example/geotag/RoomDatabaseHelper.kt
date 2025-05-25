@@ -144,9 +144,16 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
 
     fun deleteCalibratedRoom(userId: Int, roomName: String) {
         val db = writableDatabase
+        // Remove any saved polygon corners for this room
+        db.delete(
+            TABLE_ROOM_POLYGONS,
+            "$COLUMN_POLY_ROOM_NAME = ?",
+            arrayOf(roomName)
+        )
+        // Remove the room’s legacy bounding box entry
         db.delete(
             TABLE_ROOMS,
-            "$COLUMN_USER_ID=? AND $COLUMN_ROOM_NAME=?",
+            "$COLUMN_USER_ID = ? AND $COLUMN_ROOM_NAME = ?",
             arrayOf(userId.toString(), roomName)
         )
         db.close()

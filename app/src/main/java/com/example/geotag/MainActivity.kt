@@ -1,4 +1,5 @@
 package com.example.geotag
+import kotlin.math.atan2
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -358,7 +359,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
             stopLocationUpdates()
             isCalibrating = false
             val custom = getUserEnteredRoomName(roomName).ifBlank { roomName }
-            roomDbHelper.saveRoomPolygon(roomName, currentRoomCoordinates)
+            // Sort captured corners around their centroid for consistent polygon order
+            val centerLat = currentRoomCoordinates.map { it.lat }.average().toFloat()
+            val centerLon = currentRoomCoordinates.map { it.lon }.average().toFloat()
+            val sortedCorners = currentRoomCoordinates.sortedBy { pt ->
+                atan2((pt.lat - centerLat).toDouble(), (pt.lon - centerLon).toDouble())
+            }
+            roomDbHelper.saveRoomPolygon(roomName, sortedCorners)
             rangeLabel.text =
                 "Calibrated polygon with $REQUIRED_CORNER_COUNT corners ($custom)"
             addSetupRoomButton(roomName)
