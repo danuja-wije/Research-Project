@@ -2,8 +2,6 @@
 package com.example.geotag
 
 import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.sqrt
 
 import android.util.Log
 
@@ -36,26 +34,6 @@ import java.util.*
 // Represents a coordinate point for polygon geofence checks
 data class LatLngPoint(val lat: Float, val lon: Float)
 
-/**
- * Ray-casting algorithm to determine if a point lies within a polygon.
- * Uses lon as x and lat as y.
- */
-private fun isPointInPolygon(point: LatLngPoint, polygon: List<LatLngPoint>): Boolean {
-    var intersects = false
-    val x = point.lon
-    val y = point.lat
-    for (i in polygon.indices) {
-        val j = (i + 1) % polygon.size
-        val xi = polygon[i].lon
-        val yi = polygon[i].lat
-        val xj = polygon[j].lon
-        val yj = polygon[j].lat
-        val intersect = ((yi > y) != (yj > y)) &&
-                (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
-        if (intersect) intersects = !intersects
-    }
-    return intersects
-}
 
 class RoomOptionsActivity : AppCompatActivity() {
 
@@ -386,42 +364,20 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // 1) Try exact polygon
-        val polygon = roomDbHelper.getRoomPolygon(roomName)
-        if (polygon != null && polygon.size >= 4) {
-            val pt = LatLngPoint(currentLat.toFloat(), currentLon.toFloat())
-            if (isPointInPolygon(pt, polygon)) return true
-
-            // 2) Try expanded polygon
-            val eps = 0.00008f  // ~8.9m tolerance
-            val centerLat = polygon.map { it.lat }.average().toFloat()
-            val centerLon = polygon.map { it.lon }.average().toFloat()
-            val expanded = polygon.map { p ->
-                val dx = p.lat - centerLat
-                val dy = p.lon - centerLon
-                val dist = kotlin.math.sqrt(dx*dx + dy*dy).takeIf { it > 0f } ?: eps
-                LatLngPoint(
-                    p.lat + (dx / dist) * eps,
-                    p.lon + (dy / dist) * eps
-                )
-            }
-            if (isPointInPolygon(pt, expanded)) return true
-        }
-
-        // 3) Bounding-box fallback
+        // Retrieve axis-aligned min/max lat/lon boundaries
         val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
-        val (b1, b2) = boundaries
-        val minLat = minOf(b1.first, b2.first).toDouble()
-        val maxLat = maxOf(b1.first, b2.first).toDouble()
-        val minLon = minOf(b1.second, b2.second).toDouble()
-        val maxLon = maxOf(b1.second, b2.second).toDouble()
+        val (minPair, maxPair) = boundaries
+        val minLat = minPair.first.toDouble()
+        val minLon = minPair.second.toDouble()
+        val maxLat = maxPair.first.toDouble()
+        val maxLon = maxPair.second.toDouble()
 
-        // Choose epsilon based on whether we're exiting the current room
-        val isCurrent = (roomName == currentRoomName)
-        val epsBox = if (isCurrent) EXIT_EPSILON else ENTRY_EPSILON
+        // Epsilon margin in degrees (~8.9 meters)
+        val eps = 0.00008
 
-        return currentLat in (minLat - epsBox)..(maxLat + epsBox) &&
-               currentLon in (minLon - epsBox)..(maxLon + epsBox)
+        // Return true if current location is within expanded rectangle
+        return currentLat in (minLat - eps)..(maxLat + eps) &&
+               currentLon in (minLon - eps)..(maxLon + eps)
     }
 
     private fun fetchPredictedRoom() {
