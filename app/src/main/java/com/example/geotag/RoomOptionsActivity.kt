@@ -287,7 +287,7 @@ class RoomOptionsActivity : AppCompatActivity() {
                 location.latitude, location.longitude,
                 results
             )
-            if (results[0] < 2f) {
+            if (results[0] < 1f) {
                 return
             }
         }
