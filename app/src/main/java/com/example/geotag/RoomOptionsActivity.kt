@@ -1,5 +1,7 @@
 package com.example.geotag
 
+import android.util.Log
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -49,7 +51,7 @@ class RoomOptionsActivity : AppCompatActivity() {
     private var nextPredictionTimeRoom: Long = 0L
 
     // Coordinates display
-//    private lateinit var coordinatesText: TextView
+    private lateinit var coordinatesText: TextView
 
     // Holds the currently predicted room name
     private var predictedRoomName: String? = null
@@ -122,7 +124,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentRoomTextView = findViewById(R.id.currentRoom)
         lightText = findViewById(R.id.light_text)
         greeting = findViewById(R.id.tvGreeting)
-//        coordinatesText = findViewById(R.id.coordinatesText)
+        coordinatesText = findViewById(R.id.coordinatesText)
         greeting.text = getGreetings()
 // If we already had a predicted room, show it
         if (!predictedRoomName.isNullOrEmpty()) {
@@ -271,10 +273,21 @@ class RoomOptionsActivity : AppCompatActivity() {
     private fun updateLocation(location: Location) {
         currentLatitude = location.latitude
         currentLongitude = location.longitude
+        Log.d("RoomOptions", "Current coords: lat=$currentLatitude, lon=$currentLongitude")
 
         val lat = currentLatitude.toFloat()
         val lon = currentLongitude.toFloat()
-//        coordinatesText.text = "Coordinates: ($lat, $lon)"
+        coordinatesText.text = buildString {
+            append("Coords: (lat=$lat, lon=$lon)\n")
+            for (room in roomDbHelper.getCalibratedRooms(userId.toString())) {
+                val (b1, b2) = roomDbHelper.getRoomBoundaries(room.roomName)!!
+                val minLat = minOf(b1.first, b2.first)
+                val maxLat = maxOf(b1.first, b2.first)
+                val minLon = minOf(b1.second, b2.second)
+                val maxLon = maxOf(b1.second, b2.second)
+                append("${room.roomName}: lat[$minLat..$maxLat], lon[$minLon..$maxLon]\n")
+            }
+        }
 
         // Check calibrated rooms
         val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
@@ -299,8 +312,6 @@ class RoomOptionsActivity : AppCompatActivity() {
             currentRoomName = null
             currentRoomTextView.text = "Current Room not Found!"
         }
-
-
     }
 
     private fun checkLocationAgainstDatabase(
@@ -311,12 +322,14 @@ class RoomOptionsActivity : AppCompatActivity() {
         val boundaries = roomDbHelper.getRoomBoundaries(roomName)
         if (boundaries != null) {
             val (boundary1, boundary2) = boundaries
+            Log.d("RoomOptions", "Checking room '$roomName' raw boundaries: boundary1=$boundary1, boundary2=$boundary2")
             val minLat = minOf(boundary1.first, boundary2.first).toDouble()
             val maxLat = maxOf(boundary1.first, boundary2.first).toDouble()
             val minLon = minOf(boundary1.second, boundary2.second).toDouble()
             val maxLon = maxOf(boundary1.second, boundary2.second).toDouble()
+            Log.d("RoomOptions", "Room '$roomName' bounds: lat in [$minLat, $maxLat], lon in [$minLon, $maxLon]")
 
-            return currentLat in minLat..maxLat && currentLon in minLon..maxLon
+            return currentLat >= minLat && currentLat <= maxLat && currentLon >= minLon && currentLon <= maxLon
         }
         return false
     }
