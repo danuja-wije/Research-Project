@@ -15,6 +15,7 @@
     <!-- If your app needs to change Wi-Fi settings -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
+
     <!-- Allows background location updates (if needed for motion tracking, geofencing, etc.) -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
@@ -39,7 +40,17 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+
         <service android:name=".LocationLoggingService" />
+
+        <receiver
+            android:name="com.example.geotag.RoomOptionsActivity$GeofenceBroadcastReceiver"
+            android:exported="true"
+            tools:ignore="MissingClass">
+            <intent-filter>
+                <action android:name="com.google.android.gms.location.GeofenceTransition" />
+            </intent-filter>
+        </receiver>
         <!-- Example activities -->
         <activity
             android:name=".RoomOptionsActivity"

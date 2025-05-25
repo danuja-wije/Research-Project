@@ -1,15 +1,15 @@
 
 package com.example.geotag
 
-import kotlin.math.abs
 
 import android.util.Log
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Intent
+import android.app.PendingIntent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,6 +22,13 @@ import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
@@ -80,6 +87,10 @@ class RoomOptionsActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private val LOCATION_REQUEST_CODE = 123
+
+    // For geofencing
+    private lateinit var geofencingClient: GeofencingClient
+    private lateinit var geofencePendingIntent: PendingIntent
 
     // Store the user’s current coordinates
     private var currentLatitude = 0.0
@@ -258,15 +269,29 @@ class RoomOptionsActivity : AppCompatActivity() {
     }
 
     private fun checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
                 LOCATION_REQUEST_CODE
             )
+            return
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bg = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            if (bg != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                    LOCATION_REQUEST_CODE
+                )
+                return
+            }
+        }
+        // Permissions granted: start updates and geofences
+        startLocationUpdates()
+        initGeofencing()
     }
 
     override fun onRequestPermissionsResult(
@@ -278,7 +303,7 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         if (requestCode == LOCATION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startLocationUpdates()
+                checkLocationPermission()
             } else {
                 Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -359,29 +384,29 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
 
-    // Check if current location is within 2 meters of the first calibrated corner
     private fun checkLocationAgainstDatabase(
         roomName: String,
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // Get the saved polygon corners for this room
+        // 1) Load calibrated polygon corners
         val polygon = roomDbHelper.getRoomPolygon(roomName) ?: return false
-        if (polygon.isEmpty()) return false
+        if (polygon.size < 4) return false
 
-        // Take the first corner as the reference point
-        val ref = polygon[0]
-        val results = FloatArray(1)
+        // 2) Compute axis-aligned rectangle bounds from the polygon
+        val lats = polygon.map { it.lat.toDouble() }
+        val lons = polygon.map { it.lon.toDouble() }
+        val minLat = lats.minOrNull() ?: return false
+        val maxLat = lats.maxOrNull() ?: return false
+        val minLon = lons.minOrNull() ?: return false
+        val maxLon = lons.maxOrNull() ?: return false
 
-        // Compute distance in meters between current location and reference corner
-        Location.distanceBetween(
-            currentLat, currentLon,
-            ref.lat.toDouble(), ref.lon.toDouble(),
-            results
-        )
+        // Choose epsilon based on whether we are exiting the current room
+        val eps = if (roomName == currentRoomName) EXIT_EPSILON else ENTRY_EPSILON
 
-        // Return true if within 2 meters
-        return results[0] <= 2f
+        // Return true if within expanded rectangle
+        return currentLat in (minLat - eps)..(maxLat + eps) &&
+               currentLon in (minLon - eps)..(maxLon + eps)
     }
 
     private fun fetchPredictedRoom() {
@@ -613,4 +638,65 @@ class RoomOptionsActivity : AppCompatActivity() {
             nextPredictionTimeRoom = now + 2 * 60 * 1000L
         }
     }
-}
+    @SuppressLint("MissingPermission")
+    private fun initGeofencing() {
+        geofencingClient = LocationServices.getGeofencingClient(this)
+        val intent = Intent(this, GeofenceBroadcastReceiver::class.java)
+        geofencePendingIntent = PendingIntent.getBroadcast(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+        // Build geofences around each room
+        val geofenceList = roomDbHelper.getCalibratedRooms(userId.toString()).mapNotNull { room ->
+            roomDbHelper.getRoomBoundaries(room.roomName)?.let { (minPair, maxPair) ->
+                val centerLat = (minPair.first + maxPair.first) / 2.0
+                val centerLon = (minPair.second + maxPair.second) / 2.0
+                val latMeters = (maxPair.first - minPair.first) * 111320.0
+                val lonMeters = (maxPair.second - minPair.second) * (111320.0 * kotlin.math.cos(centerLat * Math.PI / 180.0))
+                val radius = kotlin.math.hypot(latMeters, lonMeters) / 2f
+                Geofence.Builder()
+                    .setRequestId(room.roomName)
+                    .setCircularRegion(centerLat, centerLon, radius.toFloat())
+                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+                    .build()
+            }
+        }
+        if (geofenceList.isEmpty()) return
+        val request = GeofencingRequest.Builder()
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .addGeofences(geofenceList)
+            .build()
+        geofencingClient.addGeofences(request, geofencePendingIntent)
+            .addOnSuccessListener { }
+            .addOnFailureListener { it.printStackTrace() }
+    }
+
+    /**
+     * Receives geofence transition events and updates the currentRoomTextView.
+     */
+    class GeofenceBroadcastReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            // Safely obtain the geofencing event, or bail out if null
+            val geofencingEvent = com.google.android.gms.location.GeofencingEvent.fromIntent(intent)
+                ?: return
+            if (geofencingEvent.hasError()) return
+
+            // We're only interested in entering
+            if (geofencingEvent.geofenceTransition == Geofence.GEOFENCE_TRANSITION_ENTER) {
+                // Get the first triggered geofence's requestId (i.e., roomName), null-safe
+                val requestId = geofencingEvent.triggeringGeofences
+                    ?.firstOrNull()
+                    ?.requestId
+                    ?: return
+
+                Handler(Looper.getMainLooper()).post {
+                    // Update the UI in RoomOptionsActivity if it's running
+                    (context as? RoomOptionsActivity)?.let { activity ->
+                        activity.currentRoomName = requestId
+                        activity.currentRoomTextView.text = requestId
+                    }
+                }
+            }
+        }
+    }}
