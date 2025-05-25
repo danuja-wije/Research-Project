@@ -303,40 +303,44 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
             // missing columns/table: ignore
         }
 
-        // Fallback to four corner columns
-        val cursor2 = db.query(
-            TABLE_ROOMS,
-            arrayOf(
-                COLUMN_LAT1, COLUMN_LON1,
-                COLUMN_LAT2, COLUMN_LON2,
-                COLUMN_LAT3, COLUMN_LON3,
-                COLUMN_LAT4, COLUMN_LON4
-            ),
-            "$COLUMN_ROOM_NAME = ?",
-            arrayOf(roomName),
-            null, null, null
-        )
-        cursor2.use {
-            if (it.moveToFirst()) {
-                val lats = listOf(
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT1)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT2)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT3)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LAT4))
-                )
-                val lons = listOf(
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON1)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON2)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON3)),
-                    it.getFloat(it.getColumnIndexOrThrow(COLUMN_LON4))
-                )
-                val minLat = lats.minOrNull() ?: return null
-                val maxLat = lats.maxOrNull() ?: return null
-                val minLon = lons.minOrNull() ?: return null
-                val maxLon = lons.maxOrNull() ?: return null
-                return Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+        // Fallback to legacy corner columns if min/max failed
+        try {
+            db.query(
+                TABLE_ROOMS,
+                arrayOf(
+                    COLUMN_LAT1, COLUMN_LON1,
+                    COLUMN_LAT2, COLUMN_LON2,
+                    COLUMN_LAT3, COLUMN_LON3,
+                    COLUMN_LAT4, COLUMN_LON4
+                ),
+                "$COLUMN_ROOM_NAME = ?",
+                arrayOf(roomName),
+                null, null, null
+            ).use { cursor2 ->
+                if (cursor2.moveToFirst()) {
+                    val lats = listOf(
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LAT1)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LAT2)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LAT3)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LAT4))
+                    )
+                    val lons = listOf(
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LON1)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LON2)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LON3)),
+                        cursor2.getFloat(cursor2.getColumnIndexOrThrow(COLUMN_LON4))
+                    )
+                    val minLat = lats.minOrNull() ?: return null
+                    val maxLat = lats.maxOrNull() ?: return null
+                    val minLon = lons.minOrNull() ?: return null
+                    val maxLon = lons.maxOrNull() ?: return null
+                    return Pair(Pair(minLat, minLon), Pair(maxLat, maxLon))
+                }
             }
+        } catch (e: SQLiteException) {
+            // legacy columns missing or table absent: no fallback
         }
+
         return null
     }
 
