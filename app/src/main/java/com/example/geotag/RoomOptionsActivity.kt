@@ -11,6 +11,7 @@ import android.os.Looper
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
@@ -206,6 +207,7 @@ class RoomOptionsActivity : AppCompatActivity() {
             else -> "Good Evening!"
         }
     }
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onResume() {
         super.onResume()
         // Start updating countdown when the activity is visible
@@ -245,6 +247,7 @@ class RoomOptionsActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -254,8 +257,10 @@ class RoomOptionsActivity : AppCompatActivity() {
 
         if (requestCode == LOCATION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Start location updates when permission is granted
-                startLocationUpdates()
+                // One-time fetch last known location on permission grant
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    if (location != null) updateLocation(location)
+                }
             } else {
                 Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show()
             }
