@@ -323,9 +323,6 @@ class MainActivity : AppCompatActivity(), LocationListener {
                 val lon = loc.longitude
                 coordinatesText.text =
                     "($lat, $lon) Calibrating $roomName..."
-                currentRoomCoordinates.add(
-                    LatLngPoint(lat.toFloat(), lon.toFloat())
-                )
             } else {
                 coordinatesText.text =
                     "Coordinates: (unknown) Calibrating $roomName..."
@@ -345,42 +342,30 @@ class MainActivity : AppCompatActivity(), LocationListener {
         roomName: String,
         rangeLabel: TextView
     ) {
-        stopLocationUpdates()
-        isCalibrating = false
+        // Only valid during calibration
+        if (!isCalibrating) return
 
-        if (currentRoomCoordinates.size >= REQUIRED_CORNER_COUNT) {
-            val custom = getUserEnteredRoomName(roomName)
-                .ifBlank { roomName }
-            roomDbHelper.saveRoomPolygon(roomName, currentRoomCoordinates)
-            rangeLabel.text = "Calibrated polygon with $REQUIRED_CORNER_COUNT corners ($custom)"
-            addSetupRoomButton(roomName)
-            calibratedRooms++
-        } else if (currentRoomCoordinates.isNotEmpty()) {
-            // Fallback: axis-aligned boundary
-            val boundary = storeRoomBoundary()
-            val custom = getUserEnteredRoomName(roomName)
-                .ifBlank { roomName }
-            rangeLabel.text =
-                "Range: ${boundary.first} to ${boundary.second} ($custom)"
-            roomDbHelper.saveCalibratedRoom(
-                userId,
-                custom,
-                boundary.first.first,
-                boundary.first.second,
-                boundary.second.first,
-                boundary.second.second
-            )
-            addSetupRoomButton(roomName)
-            calibratedRooms++
+        // Capture this corner
+        currentRoomCoordinates.add(
+            LatLngPoint(currentLatitude.toFloat(), currentLongitude.toFloat())
+        )
+        val count = currentRoomCoordinates.size
+        if (count < REQUIRED_CORNER_COUNT) {
+            coordinatesText.text =
+                "Captured corner $count of $REQUIRED_CORNER_COUNT. Move to next corner and tap Stop."
         } else {
-            Toast.makeText(
-                this, "No coordinates captured for $roomName",
-                Toast.LENGTH_SHORT
-            ).show()
+            // Finalize when 4 captured
+            stopLocationUpdates()
+            isCalibrating = false
+            val custom = getUserEnteredRoomName(roomName).ifBlank { roomName }
+            roomDbHelper.saveRoomPolygon(roomName, currentRoomCoordinates)
+            rangeLabel.text =
+                "Calibrated polygon with $REQUIRED_CORNER_COUNT corners ($custom)"
+            addSetupRoomButton(roomName)
+            calibratedRooms++
+            if (calibratedRooms == totalRooms) hideAllButtons()
         }
-
-        if (calibratedRooms == totalRooms) hideAllButtons()
-        updateButtonStates(roomName, false)
+        updateButtonStates(roomName, isCalibrating)
     }
 
     /** Pull custom name from the matching EditText */
@@ -496,22 +481,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
     override fun onLocationChanged(location: Location) {
         currentLatitude   = location.latitude
         currentLongitude  = location.longitude
-        val lat           = location.latitude
-        val lon           = location.longitude
-        coordinatesText.text =
-            "Coordinates: (${lat.toFloat()}, ${lon.toFloat()})"
-        if (isCalibrating && currentRoomCoordinates.size < REQUIRED_CORNER_COUNT) {
-            currentRoomCoordinates.add(LatLngPoint(lat.toFloat(), lon.toFloat()))
-            val count = currentRoomCoordinates.size
-            Log.d("GeoTag", "Captured corner $count: ($lat, $lon)")
-            if (count < REQUIRED_CORNER_COUNT) {
-                coordinatesText.text = "Captured corner $count of $REQUIRED_CORNER_COUNT"
-            } else {
-                coordinatesText.text = "Captured all $REQUIRED_CORNER_COUNT corners. Press Stop to finish."
-                // Optionally stop auto-updates now:
-                stopLocationUpdates()
-            }
-        }
+        val lat           = location.latitude.toFloat()
+        val lon           = location.longitude.toFloat()
+        coordinatesText.text = "Coordinates: ($lat, $lon)"
     }
 
     @SuppressLint("MissingPermission")

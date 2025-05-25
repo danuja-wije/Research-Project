@@ -54,11 +54,11 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         private const val COLUMN_MANUAL_CONTROL = "manualControl"
 
         // Polygon corners table
-        private const val TABLE_ROOM_POLYGONS = "RoomPolygons"
-        private const val COLUMN_POLY_ROOM_NAME = "roomName"
-        private const val COLUMN_POLY_POINT_INDEX = "pointIndex"
-        private const val COLUMN_POLY_LAT = "lat"
-        private const val COLUMN_POLY_LON = "lon"
+        const val TABLE_ROOM_POLYGONS = "RoomPolygons"
+        const val COLUMN_POLY_ROOM_NAME = "roomName"
+        const val COLUMN_POLY_POINT_INDEX = "pointIndex"
+        const val COLUMN_POLY_LAT = "lat"
+        const val COLUMN_POLY_LON = "lon"
     }
 
     override fun onCreate(db: SQLiteDatabase) {

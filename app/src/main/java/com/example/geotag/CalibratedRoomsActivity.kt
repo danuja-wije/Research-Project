@@ -14,6 +14,8 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.button.MaterialButton
 
+import android.database.sqlite.SQLiteException
+
 class CalibratedRoomsActivity : AppCompatActivity() {
 
     private lateinit var roomDbHelper: RoomDatabaseHelper
@@ -39,8 +41,51 @@ class CalibratedRoomsActivity : AppCompatActivity() {
             finish()
             return
         }
+        // Retrieve legacy two-point rooms
+        val rooms = mutableListOf<RoomDatabaseHelper.Room>().apply {
+            addAll(roomDbHelper.getCalibratedRooms(userId.toString()))
+        }
 
-        val rooms = roomDbHelper.getCalibratedRooms(userId.toString())
+        // Now add any polygon-only rooms
+        try {
+            val db = roomDbHelper.readableDatabase
+            db.query(
+                RoomDatabaseHelper.TABLE_ROOM_POLYGONS,
+                arrayOf(RoomDatabaseHelper.COLUMN_POLY_ROOM_NAME),
+                null, null,
+                RoomDatabaseHelper.COLUMN_POLY_ROOM_NAME,
+                null, null
+            ).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    do {
+                        val name = cursor.getString(
+                            cursor.getColumnIndexOrThrow(RoomDatabaseHelper.COLUMN_POLY_ROOM_NAME)
+                        )
+                        // Skip if already in legacy list
+                        if (rooms.none { it.roomName == name }) {
+                            // Load polygon corners
+                            val polygon = roomDbHelper.getRoomPolygon(name)
+                            polygon?.let { pts ->
+                                val lats = pts.map { it.lat }
+                                val lons = pts.map { it.lon }
+                                // Build a Room object
+                                rooms.add(
+                                    RoomDatabaseHelper.Room(
+                                        name,
+                                        lats.minOrNull() ?: 0f,
+                                        lats.maxOrNull() ?: 0f,
+                                        lons.minOrNull() ?: 0f,
+                                        lons.maxOrNull() ?: 0f
+                                    )
+                                )
+                            }
+                        }
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: SQLiteException) {
+            // RoomPolygons table may not exist yet
+        }
         if (rooms.isEmpty()) {
             displayNoRoomsMessage()
         } else {
