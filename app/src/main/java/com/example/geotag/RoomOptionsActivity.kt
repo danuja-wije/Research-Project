@@ -381,40 +381,38 @@ class RoomOptionsActivity : AppCompatActivity() {
         currentLat: Double,
         currentLon: Double
     ): Boolean {
-        // Try polygon geofence first
+        // 1) Try exact polygon
         val polygon = roomDbHelper.getRoomPolygon(roomName)
         if (polygon != null && polygon.size >= 4) {
             val pt = LatLngPoint(currentLat.toFloat(), currentLon.toFloat())
-            // 1) exact point-in-polygon
             if (isPointInPolygon(pt, polygon)) return true
 
-            // 2) expanded polygon check
-            val eps = 0.00001f
+            // 2) Try expanded polygon
+            val eps = 0.00008f  // ~8.9m tolerance
             val centerLat = polygon.map { it.lat }.average().toFloat()
             val centerLon = polygon.map { it.lon }.average().toFloat()
             val expanded = polygon.map { p ->
                 val dx = p.lat - centerLat
                 val dy = p.lon - centerLon
-                val dist = sqrt(dx*dx + dy*dy).takeIf { it > 0f } ?: eps
+                val dist = kotlin.math.sqrt(dx*dx + dy*dy).takeIf { it > 0f } ?: eps
                 LatLngPoint(
                     p.lat + (dx / dist) * eps,
                     p.lon + (dy / dist) * eps
                 )
             }
             if (isPointInPolygon(pt, expanded)) return true
-            // Polygon calibrated but point not inside it: fall through to rectangle fallback
         }
-        // Rectangle fallback (always run if not already returned true)
+
+        // 3) Bounding-box fallback
         val boundaries = roomDbHelper.getRoomBoundaries(roomName) ?: return false
         val (b1, b2) = boundaries
         val minLat = minOf(b1.first, b2.first).toDouble()
         val maxLat = maxOf(b1.first, b2.first).toDouble()
         val minLon = minOf(b1.second, b2.second).toDouble()
         val maxLon = maxOf(b1.second, b2.second).toDouble()
-
-        val eps = 0.0001 // ~11 meters
-        return currentLat in (minLat - eps)..(maxLat + eps) &&
-               currentLon in (minLon - eps)..(maxLon + eps)
+        val epsBox = 0.00008 // ~8.9 meters
+        return currentLat in (minLat - epsBox)..(maxLat + epsBox) &&
+               currentLon in (minLon - epsBox)..(maxLon + epsBox)
     }
 
     private fun fetchPredictedRoom() {
