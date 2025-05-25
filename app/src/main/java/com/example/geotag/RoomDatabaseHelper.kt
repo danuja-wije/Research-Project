@@ -21,7 +21,7 @@ class RoomDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
 
     companion object {
         private const val DATABASE_NAME = "GeoTag.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         // User table
         private const val TABLE_USERS = "Users"
